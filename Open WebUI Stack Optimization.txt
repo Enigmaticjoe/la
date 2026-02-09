@@ -1,0 +1,285 @@
+﻿Next-Generation Local AI Infrastructure: Orchestrating Open WebUI, Model Context Protocol, and Agentic Workflows in 2026
+1. Executive Summary
+The trajectory of decentralized artificial intelligence has reached a critical inflection point in early 2026. The convergence of highly efficient inference algorithms, standardized interoperability protocols, and sophisticated orchestration interfaces has transformed the concept of the "homelab" from a hobbyist sandbox into a viable, production-grade intelligence infrastructure. This report provides a comprehensive technical analysis of the architectures required to deploy, manage, and optimize a state-of-the-art local AI stack, specifically engineered for the capabilities of modern consumer hardware such as the NVIDIA RTX 40-series and AMD RDNA3 platforms.
+The primary focus of this analysis centers on Open WebUI as the de facto operating system for local intelligence. In 2026, Open WebUI has transcended its origins as a simple chat interface to become a robust platform for Agentic Workflows—autonomous loops where Large Language Models (LLMs) plan, execute tools, perceive their environment, and refine their outputs without human intervention. Central to this evolution is the Model Context Protocol (MCP), an open standard that has successfully unified the fragmented landscape of tool integrations, allowing a single tool definition to service multiple disparate AI clients.
+A significant portion of this report is dedicated to the infrastructure required to support these advanced features. We examine the transition from monolithic model loaders to microservices architectures orchestrated via Docker Compose, utilizing high-throughput engines like vLLM to maximize token generation speeds and handle concurrent user loads. The technical constraints of 12GB VRAM GPUs (specifically the RTX 4070) are analyzed in depth, providing granular configuration strategies for quantization, Key-Value (KV) cache paging, and memory pinning to prevent resource contention.
+Furthermore, the report explores the symbiotic relationship between Generative AI and Home Automation. The integration of Home Assistant via MCP and the deployment of local voice pipelines using the Wyoming Protocol (Whisper and Piper) represent a shift towards the "Agentic Home"—a living environment where the AI understands semantic intent rather than rigid command syntax. By synthesizing data from container orchestration, model architecture, and protocol design, this document serves as a definitive blueprint for architects and engineers building the sovereign AI systems of the future.
+________________
+2. Infrastructure & Orchestration: The 2026 Golden Stack
+The foundation of any robust AI deployment lies in its infrastructure. In 2026, the complexity of managing vector databases, inference servers, embedding models, and application layers necessitates a move away from simple container managers toward declarative orchestration tools. For the Unraid platform, which remains a staple in the self-hosted community, this means adopting Docker Compose as the standard for defining the "Golden Stack."
+2.1 The Microservices Paradigm
+The "Golden Stack" architecture separates concerns into distinct, scalable layers. Unlike monolithic applications where the model loader and UI are tightly coupled, the 2026 standard dictates a decoupled approach. This separation allows for independent scaling—for instance, upgrading the inference engine without disrupting the user interface or swapping out the vector database without retraining the embedding model.
+The core components of this stack include:
+1. Orchestration Layer: Open WebUI, serving as the user-facing frontend and the "brain" that manages context and tool execution.1
+2. Inference Layer: vLLM or Ollama, providing the raw compute capability to generate tokens from prompts.2
+3. Semantic Layer: Text Embeddings Inference (TEI), responsible for converting text into vector representations for Retrieval Augmented Generation (RAG).3
+4. Memory Layer: Vector Databases like Qdrant or Milvus, storing long-term semantic memories.
+5. Perception Layer: SearXNG for web connectivity and multimodal inputs.4
+6. Interoperability Layer: mcpo proxies bridging standard IO (stdio) tools to HTTP interfaces.5
+2.1.1 Docker Compose Configuration Strategy
+Deploying this stack on Unraid requires bypassing the native "Community Apps" UI for complex inter-container networking. A Docker Compose definition ensures that all services share a dedicated bridge network and can communicate via predictable hostnames. A critical architectural decision in this setup is resource allocation.
+For a system equipped with a single NVIDIA RTX 4070 (12GB VRAM), resource contention is the primary failure mode. If vLLM is allowed to default behavior, it will attempt to allocate 90% of the available VRAM for its KV cache and weights. This leaves insufficient memory for the embedding model (TEI) or other GPU-accelerated containers, resulting in an Out-Of-Memory (OOM) crash loop or a "Manifest Unknown" error during deployment if dependencies are not strictly defined.3
+The following configuration block illustrates the necessary resource pinning and environment variable management required to stabilize the stack:
+
+
+YAML
+
+
+
+
+services:
+ # Application Interface: The Command Center
+ open-webui:
+   image: ghcr.io/open-webui/open-webui:main
+   container_name: open-webui
+   hostname: open-webui
+   restart: unless-stopped
+   ports:
+     - "3000:8080"
+   environment:
+     # Direct connection to the vLLM backend, bypassing Ollama for primary inference
+     - OLLAMA_BASE_URL=http://vllm:8000/v1
+     # Mandatory for persistent MCP authentication 
+     - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+     # Identifying the vector database
+     - VECTOR_DB_URL=http://qdrant:6333
+   volumes:
+     - open-webui-data:/app/backend/data
+   extra_hosts:
+     - "host.docker.internal:host-gateway"
+   networks:
+     - ai-network
+
+ # Inference Engine: High-Performance vLLM
+ vllm:
+   image: vllm/vllm-openai:v0.15.1
+   container_name: vllm
+   runtime: nvidia
+   deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: 1
+             capabilities: [gpu]
+   environment:
+     - NVIDIA_VISIBLE_DEVICES=all
+     # Critical for inter-process communication on consumer GPUs
+     - NCCL_P2P_DISABLE=1
+   volumes:
+     - /mnt/user/appdata/huggingface:/root/.cache/huggingface
+   command: >
+     --model Qwen/Qwen2.5-14B-Instruct-AWQ
+     --quantization awq_marlin
+     --gpu-memory-utilization 0.80
+     --max-model-len 8192
+     --enforce-eager
+     --port 8000
+    ports:
+     - "8000:8000"
+   ipc: host
+   networks:
+     - ai-network
+
+ # Semantic Layer: Optimized Embedding
+ tei-embed:
+   image: ghcr.io/huggingface/text-embeddings-inference:89-1.8
+   container_name: tei-embed
+   runtime: nvidia
+   deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: 1
+             capabilities: [gpu]
+   command: >
+     --model-id Qwen/Qwen2.5-Embedding
+     --port 80
+     --auto-truncate
+    ports:
+     - "8881:80"
+   networks:
+     - ai-network
+
+networks:
+ ai-network:
+   driver: bridge
+
+volumes:
+ open-webui-data:
+
+This configuration explicitly limits vLLM to 80% of the GPU memory (--gpu-memory-utilization 0.80), reserving approximately 2.4GB on a 12GB card. This headroom is vital for the TEI container, which typically requires 600MB-1.5GB depending on the embedding model size, and for the system's display overhead if the card is not headless. The use of ipc: host is mandatory for vLLM to utilize shared memory for efficient tensor operations, preventing shared memory segment errors during model loading.3
+2.2 Network Topology and Security
+In 2026, network isolation within the container stack is a security baseline. The definition of a custom bridge network (ai-network) ensures that the inference APIs (port 8000) and vector database ports (6333) are accessible to Open WebUI but can be isolated from the wider Local Area Network (LAN) if desired. For external access, best practices dictate the use of a reverse proxy like Traefik or Nginx Proxy Manager, terminating SSL/TLS at the edge.
+Furthermore, the WEBUI_SECRET_KEY environment variable is no longer optional. In previous versions, Open WebUI would generate a random key at startup if one was not provided. However, with the introduction of MCP tools that require persistent authentication tokens (e.g., OAuth for Google Drive or Notion), a rotating key renders these tokens undecryptable upon container restart. Defining a static, high-entropy string for this variable ensures that tool connections persist across reboots, a critical requirement for a stable agentic workflow.4
+________________
+3. Inference Engines & Hardware Optimization
+The engine driving the AI stack determines its throughput, latency, and concurrency capabilities. While 2024 and 2025 saw the rise of Ollama as a user-friendly wrapper for llama.cpp, 2026 has solidified vLLM as the superior choice for production-grade, high-throughput inference on NVIDIA hardware.
+3.1 Comparative Analysis: vLLM vs. Ollama
+The divergence between these two engines lies in their memory management architectures and intended use cases.
+Ollama utilizes llama.cpp backends, which prioritize compatibility and ease of use. Its memory manager is dynamic, capable of splitting models between VRAM and system RAM (CPU offloading). While this prevents crashes when a model exceeds VRAM, it introduces severe latency penalties due to the limited bandwidth of the PCIe bus compared to the GPU's internal memory bandwidth. Benchmarks indicate that Ollama struggles with high concurrent loads, often serializing requests or exhibiting significant slowdowns when managing multiple user contexts.2
+vLLM, conversely, is engineered for throughput. Its core innovation, PagedAttention, manages the Key-Value (KV) cache memory in non-contiguous blocks, similar to operating system virtual memory paging. This eliminates memory fragmentation and allows for substantially larger effective batch sizes. On an NVIDIA RTX 4070, vLLM can deliver 11-15x higher token generation rates compared to Ollama in batched scenarios.2 Furthermore, vLLM enforces strict memory residence; it will not offload layers to the CPU. While this makes it less flexible for running models larger than the available VRAM, it guarantees consistent, low-latency performance essential for voice interfaces and real-time agentic interactions.
+3.2 Optimization for RTX 4070 (12GB VRAM)
+The 12GB VRAM buffer of the RTX 4070 represents a significant constraint for modern Large Language Models, which have grown in parameter count and context window requirements. Optimizing for this hardware requires a strategic balance between model size, quantization precision, and context length.
+3.2.1 Quantization Science
+In 2026, AWQ (Activation-aware Weight Quantization) and GPTQ have largely superseded standard integer quantization (RTN) for GPU inference. These methods selectively preserve the precision of the most salient weights—those that trigger significant activations—while compressing the rest to 4-bit representation. The introduction of Marlin kernels has further accelerated 4-bit inference on NVIDIA Ada Lovelace architectures, allowing 4-bit models to run at speeds comparable to FP16 inference but with a fraction of the memory footprint.6
+For the RTX 4070:
+* Model Weights: A 14 billion parameter model (e.g., Qwen 2.5 14B) at 4-bit precision occupies approximately 8.5 GB of VRAM.
+* KV Cache Overhead: The remaining ~3.5 GB must accommodate the KV cache, which grows linearly with context length and batch size.
+* Context Strategy: To prevent OOM errors, the context length must be capped. Setting --max-model-len 8192 ensures that the KV cache fits within the remaining VRAM budget. Attempting to run a full 32k context on a 14B model would exhaust the 12GB buffer, causing vLLM to fail initialization.10
+3.2.2 The "Danger Zone" of 12GB
+The 12GB limitation forces a choice between model intelligence (parameter count) and "memory" (context length). For tasks requiring deep reasoning (coding, logic), a 14B model with a shorter context is preferable. For RAG tasks involving large document summarization, a smaller model (e.g., 7B or 8B) allows for a larger context window (up to 32k) within the same VRAM envelope.
+3.3 Distributed Inference: The Heterogeneous Challenge
+Advanced users often possess mixed hardware, such as a primary server with an RTX 4070 and a workstation with an AMD RX 7900 XT (20GB VRAM). Integrating these into a unified inference cluster presents specific challenges in 2026.
+Tensor Parallelism (TP), which splits individual tensors across GPUs, requires high-bandwidth interconnects like NVLink. It is generally not feasible across standard PCIe or Ethernet connections between nodes due to latency. Additionally, vLLM does not natively support TP across mixed architectures (NVIDIA + AMD) in a single instance.12
+Pipeline Parallelism (PP) offers a viable alternative for multi-node setups. By splitting the model layers—assigning the first 20 layers to the RTX 4070 and the subsequent layers to the RX 7900 XT—users can distribute the memory load. However, this introduces network latency between the nodes for every token generated, significantly reducing inference speed.
+Federated Inference Strategy: A more pragmatic approach for 2026 is Federated Inference. Instead of splitting a single model, users run independent vLLM instances on each node:
+1. Node A (RTX 4070): Hosting a fast, low-latency model (e.g., Llama 3.1 8B) for chat and voice tasks.
+2. Node B (RX 7900 XT): Hosting a larger, high-VRAM model (e.g., Qwen 2.5 32B or 72B quantized) for deep research and complex coding tasks. Open WebUI configures these as separate models or utilizes a "Model Union" router to direct queries based on complexity, leveraging the strengths of each hardware platform without the fragility of distributed tensor operations.14
+________________
+4. The Application Layer: Open WebUI & Pipelines
+Open WebUI acts as the orchestrator of the AI stack, providing the interface where users interact with models, tools, and documents. The 2026 release cycle has introduced features that transform it from a passive chat interface into an active agentic workspace.
+4.1 Pipelines: The Logic Injection Layer
+The Pipelines framework allows developers to inject custom Python logic into the request-response loop of the AI. This capability is distinct from "Tools" (which the model calls); Pipelines manipulate the data flow itself.1
+4.1.1 Telemetry and Observability
+One of the most critical applications of Pipelines in a production environment is telemetry. By integrating a pipeline filter connected to LangFuse or Opik, administrators can log every interaction, tracking token usage, latency metrics, and response quality. This data is invaluable for debugging model performance issues (e.g., identifying prompts that trigger excessive latency) and for auditing agentic actions.16
+4.1.2 Dynamic Routing
+Pipelines facilitate cost and performance optimization through dynamic routing. A "Router Pipeline" can analyze the incoming user query for complexity or specific keywords.
+* Scenario: If a query contains "summary" or "reading", the pipeline routes it to a smaller, faster model (e.g., Llama 3.1 8B).
+* Scenario: If the query involves "code" or complex logic, the pipeline seamlessly redirects the request to a larger model (e.g., DeepSeek-V3 or Qwen 2.5 72B), potentially hosted on a different node or API provider. This occurs transparently to the user, ensuring the right tool is used for the job without manual model switching.17
+4.2 Knowledge Ingestion and RAG Architecture
+Retrieval Augmented Generation (RAG) in Open WebUI 2026 has matured into a sophisticated "Knowledge" subsystem.
+Vector Database Integration: While Open WebUI includes an embedded ChromaDB instance, production setups utilize standalone vector databases like Qdrant or Milvus. These external databases offer superior scalability, allowing for the storage of millions of vectors without the performance degradation seen in file-based embedded databases. The connection is defined simply via the VECTOR_DB_URL environment variable.
+Hybrid Search and Reranking: To combat hallucinations, the 2026 stack employs a two-stage retrieval process.
+1. Retrieval: The system queries the vector database using dense vector similarity (semantic search) and sparse keyword matching (lexical search). This Hybrid Search ensures that both conceptually similar and keyword-exact matches are found.
+2. Reranking: The retrieved chunks are passed to a Cross-Encoder model (hosted by the tei-rerank service, typically bge-reranker-large). This model scores each chunk based on its relevance to the specific query, reordering them so that the most pertinent information is presented to the LLM. This step significantly improves the accuracy of RAG responses.18
+________________
+5. Interoperability: The Model Context Protocol (MCP)
+The introduction of the Model Context Protocol (MCP) represents the most significant paradigm shift in local AI interoperability for 2026. Prior to MCP, connecting an LLM to external tools (Google Drive, Slack, local file systems) required bespoke integrations for each platform. MCP standardizes this connection, creating a universal "USB-C for AI tools."
+5.1 The Protocol Architecture: Stdio vs. HTTP
+MCP operates on a client-host-server topology. The Host (Open WebUI) connects to Servers (tools) via a Client. A critical architectural distinction in the MCP ecosystem is the transport layer.
+* Stdio (Standard Input/Output): The vast majority of local MCP servers (e.g., the official filesystem or git servers) are designed to communicate over stdio. This design choice prioritizes security and simplicity for desktop applications like Claude Desktop, as it strictly limits the server's lifecycle to the parent process and avoids exposing network ports.
+* HTTP/SSE (Server-Sent Events): Open WebUI, running in a containerized Docker environment, primarily communicates with external services via HTTP. It cannot natively "pipe" into a stdio process running on the host machine or in a separate container without a bridge.
+5.2 The Bridge: mcpo Proxy
+To reconcile these transport differences, the mcpo (MCP-to-OpenAPI proxy) tool is utilized. mcpo wraps a stdio-based MCP server and exposes its capabilities via an SSE-compatible HTTP endpoint that Open WebUI can consume.5
+5.2.1 Configuration and Deployment
+Implementing an MCP tool chain requires deploying mcpo containers alongside the main stack. For example, to enable a "Time" tool:
+1. Dockerization: A lightweight Docker image is created that installs both mcpo and the target MCP server (e.g., mcp-server-time).
+Dockerfile
+FROM python:3.11-slim
+RUN pip install mcpo uv
+RUN pip install mcp-server-time
+CMD ["uv", "run", "mcpo", "--port", "8000", "--", "mcp-server-time"]
+
+2. Orchestration: This container is added to the Docker Compose stack, exposing port 8000 to the internal network.
+3. Connection: In Open WebUI's "Admin Settings > External Tools," the administrator adds a new connection.
+   * Type: Must be set to MCP (Streamable HTTP). Selecting "OpenAPI" will cause a protocol mismatch error, crashing the UI.7
+   * URL: http://mcp-time:8000/sse.
+5.3 Security Implications of MCP
+Exposing local system tools via HTTP, even within a Docker network, introduces new attack vectors. The 2026 security best practice mandates the use of Bearer Authentication for mcpo proxies. The proxy should be launched with a predefined API key, and Open WebUI must be configured to present this key when connecting. This prevents unauthorized containers or malicious actors on the local network from accessing sensitive tools (e.g., a filesystem MCP server) without credentials.5
+________________
+6. The Agentic Smart Home: Home Assistant Integration
+The convergence of Open WebUI and Home Assistant (HA) in 2026 creates an "Agentic Home" where interactions are semantic rather than syntactic. Users no longer need to remember exact entity names or command phrases; the AI infers intent and orchestrates the necessary actions.
+6.1 The Voice Pipeline: Wyoming Protocol
+Low-latency voice interaction is a prerequisite for a natural smart home experience. The Wyoming Protocol has emerged as the standard for local voice pipelines, decoupling the Speech-to-Text (STT) and Text-to-Speech (TTS) services from the core HA instance.
+6.1.1 Architectural Deployment
+Running Whisper (STT) and Piper (TTS) on the HA hardware (often a Raspberry Pi or NUC) creates a bottleneck. The optimal 2026 architecture offloads these compute-intensive tasks to the Unraid server, leveraging the RTX 4070 for acceleration.
+   * Wyoming-Whisper: Deployed as a Docker container with NVIDIA runtime access (--device cuda). This reduces transcription latency from seconds (on CPU) to milliseconds, enabling near-instantaneous responsiveness.22
+   * Wyoming-Piper: A neural TTS container that generates high-quality, natural-sounding speech locally.
+Home Assistant connects to these remote containers via the "Wyoming" integration, simply pointing to the Unraid server's IP and the exposed ports (10300 for Whisper, 10200 for Piper). This setup ensures that voice data never leaves the local network, preserving privacy while delivering cloud-rivaling performance.24
+6.2 Agentic Control via MCP
+While legacy integrations allowed for basic exposure of HA entities to LLMs, the MCP approach enables true agency. The ha-mcp server acts as the interface, exposing HA's API as a set of discoverable tools.
+Setup Workflow:
+   1. Token Generation: A "Long-Lived Access Token" is generated within Home Assistant.
+   2. Proxy Deployment: An mcpo container is deployed, wrapping the ha-mcp executable. The HA URL and Token are passed as environment variables.
+   3. Tool Exposure: Once connected to Open WebUI, the model gains access to tools like hass_get_state, hass_turn_on, hass_call_service, and hass_list_areas.26
+Agentic Capabilities:
+Unlike rigid intent scripts, the MCP-enabled agent can reason about the state of the home.
+   * User Query: "It's a bit stuffy in here."
+   * Agent Reasoning: The agent uses hass_get_state to check the thermostat and humidity sensors. Finding the temperature is high, it reasons that turning on the fan is the appropriate response.
+   * Action: The agent calls hass_turn_on(entity_id="fan.living_room") and responds to the user, "I've turned on the living room fan for you." This loop of Observation -> Reasoning -> Action is the hallmark of the 2026 Agentic Home.28
+________________
+7. Knowledge & Research Systems
+Access to external information is crucial for an AI agent to remain relevant. The 2026 ecosystem offers distinct modes of web interaction: Traditional Search RAG and Agentic Deep Research.
+7.1 SearXNG Configuration & The JSON Fix
+SearXNG remains the gold standard for privacy-respecting metasearch. However, a pervasive configuration error plagues many 2026 deployments: the "JSON Format Error." By default, many SearXNG Docker images restrict output formats to HTML and RSS to prevent abuse. Open WebUI, however, requires search results in JSON format to ingest and parse them programmatically.
+Administrators must explicitly enable JSON in the SearXNG settings.yml file:
+
+
+YAML
+
+
+
+
+search:
+ formats:
+   - html
+   - json  # Mandatory for Open WebUI integration
+
+Failure to include this line results in Open WebUI receiving a 403 Forbidden or 400 Bad Request error when attempting to perform web searches, as the engine refuses to serve the requested JSON data.29
+7.2 Agentic Deep Research
+Beyond simple search, 2026 brings Agentic Deep Research. In this mode, enabled via "Native Tool Calling," the model is not merely fed search snippets. Instead, it is given a search tool and a URL fetching tool.
+   1. Planning: The model formulates a search strategy.
+   2. Execution: It executes queries and analyzes the summaries.
+   3. Deep Dive: Using the native fetch_url tool, it retrieves the full content of promising pages.
+   4. Synthesis: It cross-references facts and may initiate secondary search loops to resolve ambiguities.
+This capability mimics human research patterns but requires a model with strong reasoning capabilities (e.g., Llama 3.1 70B or high-quality mid-sized models). For hardware-constrained setups (RTX 4070), users may need to rely on optimized, smaller reasoning models like Qwen 2.5 32B (quantized) or offload the research logic to an external API via pipelines.32
+Alternative Providers:
+   * Crawl4AI: A specialized tool for deep scraping that handles dynamic JavaScript content better than standard fetchers, useful for researching complex modern websites.34
+   * Jina Reader: A service that converts messy HTML into clean, LLM-friendly Markdown, significantly improving the quality of the data ingested during the research process.35
+________________
+8. Model Selection for 2026
+The constraints of 12GB VRAM on the RTX 4070 dictate a careful selection of models. The goal is to maximize reasoning capability per gigabyte of memory.
+8.1 The 12GB Class Leaders
+   1. Qwen 2.5 / 3 (14B): Widely regarded as the "Goldilocks" model of early 2026. At 4-bit (AWQ) quantization, it occupies ~9GB VRAM, leaving sufficient room for an 8k-12k context window. Its coding and logic capabilities rival older 70B models, making it the top choice for agentic workflows.36
+   2. Llama 3.1 (8B): The standard for speed. Highly optimized, extremely fast, and with a massive ecosystem of fine-tunes. It is the ideal driver for voice assistants where latency is critical.
+   3. Mistral Nemo (12B): Offers a larger native context window and a strong balance of performance and size, particularly suited for RAG tasks involving lengthy document summarization.11
+8.2 Uncensored & Specialized Models
+For use cases requiring unrestricted creativity, historical analysis, or roleplay without safety refusals, standard commercial models often fail. The 2026 community has coalesced around "abliterated" models—base models that have had their refusal mechanisms surgically removed via weight manipulation rather than just fine-tuning.
+   * Dolphin (Llama 3.1/Qwen based): Cognitive Systems' Dolphin series remains the benchmark for uncensored instruction following.
+   * Lexi / Frank: Specialized personas designed for direct, unfiltered interaction, often preferred for creative writing tasks.3
+________________
+9. Conclusion
+The 2026 local AI landscape is defined by integration. The era of the isolated chatbot is over. By deploying the stack described—vLLM for high-throughput inference, Open WebUI for orchestration, and MCP for universal connectivity—users can construct a system that not only converses but acts.
+The "Golden Stack" of Docker Compose on Unraid provides the necessary stability and resource isolation. The adoption of Agentic Workflows empowers the system to manage the smart home via Home Assistant, conduct deep web research via SearXNG, and maintain long-term memory via vector databases. While hardware limitations, specifically VRAM capacity, remain the primary bottleneck for consumer-grade deep reasoning, optimizations in quantization (AWQ/Marlin) and efficient kernels (FlashAttention) allow hardware like the RTX 4070 to punch significantly above its weight class.
+The path forward involves a continuous refinement of these agentic loops. As models become smaller and more capable, and as the MCP ecosystem expands to include more tools, the local AI will evolve from a passive responder into a proactive, autonomous partner in the digital and physical home. This report provides the technical foundation to build, secure, and optimize that future today.
+Works cited
+   1. Features | Open WebUI, accessed February 8, 2026, https://docs.openwebui.com/features/
+   2. Ollama vs. vLLM: A deep dive into performance benchmarking | Red Hat Developer, accessed February 8, 2026, https://developers.redhat.com/articles/2025/08/08/ollama-vs-vllm-deep-dive-performance-benchmarking
+   3. Untitled document (8).txt
+   4. README.md - Open WebUI with SearXNG Integration - GitHub, accessed February 8, 2026, https://github.com/psyray/open-webui-docker/blob/master/README.md
+   5. open-webui/mcpo: A simple, secure MCP-to-OpenAPI proxy server - GitHub, accessed February 8, 2026, https://github.com/open-webui/mcpo
+   6. How to Choose the Right GPU for vLLM Inference - DigitalOcean, accessed February 8, 2026, https://www.digitalocean.com/community/conceptual-articles/vllm-gpu-sizing-configuration-guide
+   7. Model Context Protocol (MCP) - Open WebUI, accessed February 8, 2026, https://docs.openwebui.com/features/mcp/
+   8. Ollama vs. vLLM: The Definitive Guide to Local LLM Frameworks in 2025, accessed February 8, 2026, https://blog.alphabravo.io/ollama-vs-vllm-the-definitive-guide-to-local-llm-frameworks-in-2025/
+   9. Ollama vs VLLM (2026) | Which One is actually Better? - YouTube, accessed February 8, 2026, https://www.youtube.com/watch?v=vnHpzlDXf38
+   10. Best GPU for LLM in 2026 (Including Local LLM Setups) - Fluence Network, accessed February 8, 2026, https://www.fluence.network/blog/best-gpu-for-llm/
+   11. Best Local LLMs for Every NVIDIA RTX 40 Series GPU - ApX Machine Learning, accessed February 8, 2026, https://apxml.com/posts/best-local-llm-rtx-40-gpu
+   12. [Doc]: How to make Multi-Node Inference · Issue #10886 · vllm-project/vllm - GitHub, accessed February 8, 2026, https://github.com/vllm-project/vllm/issues/10886
+   13. Vllm, combine 7900 xtx and W7900, accessed February 8, 2026, https://discuss.vllm.ai/t/vllm-combine-7900-xtx-and-w7900/1681
+   14. vLLM distributed inference with MoRI - AMD ROCm documentation, accessed February 8, 2026, https://rocm.docs.amd.com/en/latest/how-to/rocm-for-ai/inference/benchmark-docker/vllm-mori-distributed.html
+   15. Multi-node inference load balancing — GPU cluster networking documentation, accessed February 8, 2026, https://instinct.docs.amd.com/projects/gpu-cluster-networking/en/latest/how-to/multi-node-inference-lb.html
+   16. open-webui/pipelines: Pipelines: Versatile, UI-Agnostic OpenAI-Compatible Plugin Framework - GitHub, accessed February 8, 2026, https://github.com/open-webui/pipelines
+   17. Guide to creating a pipeline · open-webui pipelines · Discussion #189 - GitHub, accessed February 8, 2026, https://github.com/open-webui/pipelines/discussions/189
+   18. As of Q1 2026, what are your top picks for Open WebUI's API search options, for general search, agentic retrieval, deep extraction, or deep research? Paid or Free. : r/OpenWebUI - Reddit, accessed February 8, 2026, https://www.reddit.com/r/OpenWebUI/comments/1qvxsh6/as_of_q1_2026_what_are_your_top_picks_for_open/
+   19. Best Practice: Knowledge Base, RAG and Custom Modell #11821 - GitHub, accessed February 8, 2026, https://github.com/open-webui/open-webui/discussions/11821
+   20. Part 2: Getting Started with Local AI - Open WebUI Documents and Tools | by John Wong, accessed February 8, 2026, https://medium.com/@able_wong/getting-started-with-local-ai-open-webui-documents-and-tools-part-2-5f8f9c67a414
+   21. MCP Support - Open WebUI, accessed February 8, 2026, https://docs.openwebui.com/features/plugin/tools/openapi-servers/mcp/
+   22. GUIDE Entirely local Voice in GPU on old mid range laptop (docker compose inside) : r/homeassistant - Reddit, accessed February 8, 2026, https://www.reddit.com/r/homeassistant/comments/1g0emz4/guide_entirely_local_voice_in_gpu_on_old_mid/
+   23. Built a voice assistant with Home Assistant, Whisper, and Piper : r/selfhosted - Reddit, accessed February 8, 2026, https://www.reddit.com/r/selfhosted/comments/1pj85lh/built_a_voice_assistant_with_home_assistant/
+   24. Wyoming protocol - Voice Assistant, accessed February 8, 2026, https://community.home-assistant.io/t/wyoming-protocol/625621
+   25. Home Assistant ❤️ Voice - Tutorial 05 - Wyoming protocol - YouTube, accessed February 8, 2026, https://www.youtube.com/watch?v=CYeOXw2ZWkw
+   26. Model Context Protocol Server - Home Assistant, accessed February 8, 2026, https://www.home-assistant.io/integrations/mcp_server/
+   27. homeassistant-ai/ha-mcp: The Unofficial and Awesome Home Assistant MCP Server, accessed February 8, 2026, https://github.com/homeassistant-ai/ha-mcp
+   28. Thought I'd share my how-to video for connecting Open WebUI to Home Assistant - Reddit, accessed February 8, 2026, https://www.reddit.com/r/OpenWebUI/comments/1odjidf/thought_id_share_my_howto_video_for_connecting/
+   29. Error while enabling the Searxng as web search engine in Open Web UI - Stack Overflow, accessed February 8, 2026, https://stackoverflow.com/questions/79043814/error-while-enabling-the-searxng-as-web-search-engine-in-open-web-ui
+   30. Web Search error · open-webui open-webui · Discussion #3811 · GitHub, accessed February 8, 2026, https://github.com/open-webui/open-webui/discussions/3811
+   31. Searxng URL How to obtain · open-webui open-webui · Discussion #3003 - GitHub, accessed February 8, 2026, https://github.com/open-webui/open-webui/discussions/3003
+   32. Agentic Web Search & URL Fetching - Open WebUI, accessed February 8, 2026, https://docs.openwebui.com/features/web-search/agentic-search/
+   33. Best "Deep research" for local LLM in 2026 - platforms/tools/interface/setups : r/LocalLLaMA, accessed February 8, 2026, https://www.reddit.com/r/LocalLLaMA/comments/1qwgyrn/best_deep_research_for_local_llm_in_2026/
+   34. Crawl4ai integration with open-webui #18052 - GitHub, accessed February 8, 2026, https://github.com/open-webui/open-webui/discussions/18052
+   35. Star History Monthly May 2024 | Open Source AI Web Scrapers, accessed February 8, 2026, https://star-history.com/blog/ai-web-scraper
+   36. Ultimate Guide - The Best LLMs for Low-VRAM GPUs in 2026 - SiliconFlow, accessed February 8, 2026, https://www.siliconflow.com/articles/en/best-LLMs-for-low-VRAM-GPUs
+   37. What is the smartest uncensored nsfw LLM you can run with 12GB VRAM and 32GB RAM? : r/LocalLLaMA - Reddit, accessed February 8, 2026, https://www.reddit.com/r/LocalLLaMA/comments/1pkidf6/what_is_the_smartest_uncensored_nsfw_llm_you_can/
+   38. Best unsensored model now for 24gb VRAM? : r/LocalLLaMA - Reddit, accessed February 8, 2026, https://www.reddit.com/r/LocalLLaMA/comments/1q20ruj/best_unsensored_model_now_for_24gb_vram/
