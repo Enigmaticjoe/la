@@ -1,7 +1,7 @@
 #!/bin/bash
 ###############################################################################
 # brawn-setup.sh
-# Run on Brawn (192.168.1.222) to create all directories, set permissions,
+# Run on Brawn (192.168.1.9222) to create all directories, set permissions,
 # validate prerequisites, and prepare for Portainer stack deployment.
 #
 # Usage: bash brawn-setup.sh
@@ -20,7 +20,7 @@ section() { echo -e "\n${BOLD}${C}═══ $1 ═══${NC}"; }
 echo ""
 echo "╔══════════════════════════════════════════════════╗"
 echo "║   BRAWN Stack Setup & Validation Script         ║"
-echo "║   192.168.1.222 | Portainer :8008               ║"
+echo "║   192.168.1.9222 | Portainer :8008               ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 
@@ -59,7 +59,6 @@ DIRS=(
   "/mnt/user/appdata/overseerr"
   "/mnt/user/appdata/tautulli"
   # AI Stack
-  "/mnt/user/appdata/ollama"
   "/mnt/user/appdata/ai-models"
   "/mnt/user/appdata/huggingface/models"
   "/mnt/user/appdata/openwebui"
@@ -140,7 +139,7 @@ if [ ! -f "/mnt/user/appdata/hass-unraid/data/config.yaml" ]; then
   cat > /mnt/user/appdata/hass-unraid/data/config.yaml << 'HASSCONF'
 unraid:
   - name: Brawn
-    host: 192.168.1.222
+    host: 192.168.1.9222
     port: 443
     ssl: true
     ssl_verify: false
@@ -150,7 +149,7 @@ unraid:
     scan_interval: 30
 
 mqtt:
-  host: 192.168.1.222
+  host: 192.168.1.9222
   port: 1883
   username: mqtt_user
   password: CHANGE_ME
@@ -286,7 +285,7 @@ declare -A PORTS=(
   [9999]="Dozzle"
   [10200]="Piper TTS"
   [10300]="Whisper STT"
-  [11434]="Ollama"
+  [11434]="(unused)"
   [32400]="Plex"
   [61208]="Glances"
 )
@@ -313,10 +312,10 @@ fi
 section "NETWORK"
 
 # Check Home Assistant
-if ping -c 1 -W 2 192.168.1.149 &>/dev/null; then
-  ok "Home Assistant (192.168.1.149) reachable"
+if ping -c 1 -W 2 192.168.1.9149 &>/dev/null; then
+  ok "Home Assistant (192.168.1.9149) reachable"
 else
-  warn "Cannot reach Home Assistant at 192.168.1.149"
+  warn "Cannot reach Home Assistant at 192.168.1.9149"
 fi
 
 # Check GraphQL API
@@ -348,7 +347,7 @@ echo "  2. Edit config files:"
 echo "     /mnt/user/appdata/hass-unraid/data/config.yaml"
 echo "     /mnt/user/appdata/zurg/config/config.yml"
 echo ""
-echo "  3. Deploy stacks in Portainer (192.168.1.222:8008):"
+echo "  3. Deploy stacks in Portainer (192.168.1.9222:8008):"
 echo "     Stack 1: 01-core-infrastructure.yml"
 echo "     Stack 2: 02-media-stack.yml (needs .env vars)"
 echo "     Stack 3: 03-ai-stack.yml"
@@ -356,7 +355,7 @@ echo "     Stack 4: 04-storage-stack.yml (needs .env vars)"
 echo ""
 echo "  4. Install HACS integration in Home Assistant:"
 echo "     - domalab/ha-unraid (GraphQL native)"
-echo "     - MQTT integration (broker: 192.168.1.222:1883)"
+echo "     - MQTT integration (broker: 192.168.1.9222:1883)"
 echo ""
 echo "  5. Validate with: bash brawn-validate.sh"
 echo ""
@@ -372,7 +371,7 @@ printf "  %-6s %-20s  %-6s %-20s\n" "3002" "AnythingLLM" "9696" "Prowlarr"
 printf "  %-6s %-20s  %-6s %-20s\n" "3010" "Uptime Kuma" "9999" "Dozzle"
 printf "  %-6s %-20s  %-6s %-20s\n" "3100" "Browserless" "10200" "Piper TTS"
 printf "  %-6s %-20s  %-6s %-20s\n" "5055" "Overseerr" "10300" "Whisper STT"
-printf "  %-6s %-20s  %-6s %-20s\n" "5678" "n8n" "11434" "Ollama"
+printf "  %-6s %-20s  %-6s %-20s\n" "5678" "n8n" "" ""
 printf "  %-6s %-20s  %-6s %-20s\n" "6333" "Qdrant" "32400" "Plex (host)"
 printf "  %-6s %-20s  %-6s %-20s\n" "6500" "RDT-Client" "61208" "Glances"
 printf "  %-6s %-20s  %-6s %-20s\n" "6767" "Bazarr" "8008" "Portainer"

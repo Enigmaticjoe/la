@@ -1,14 +1,13 @@
 ###############################################################################
-# 03-ai-stack.yml
+# 03-ai-stack.yml (FINAL - vLLM Only, No Ollama)
 # BRAWN (192.168.1.222) - AI Orchestration Stack
 # Deploy via: Portainer (192.168.1.222:8008) → Stacks → Add Stack
 #
-# GPU: RTX 4070 12GB - shared between vLLM (70%) + Embeddings (20%) + Plex HW
-# NOTE: Ollama and vLLM share GPU. Run ONE inference engine at a time,
-#       or set gpu-memory-utilization to split. Default: vLLM primary.
-#
-# Services: Ollama, OpenWebUI, vLLM, TEI Embeddings, Qdrant,
-#           AnythingLLM, n8n, Whisper, Piper
+# GPU BUDGET (RTX 4070 12GB):
+#   vLLM:       ~9.6GB (80%) — Qwen2.5-7B-Instruct-AWQ
+#   Embeddings: ~1.5GB — Qwen3-Embedding-0.6B float16
+#   Plex HW:    Shared NVENC/NVDEC (separate silicon)
+#   Headroom:   ~0.9GB
 #
 # Network: ai_net (172.25.0.0/16)
 ###############################################################################
@@ -21,10 +20,6 @@ networks:
         - subnet: 172.25.0.0/16
 
 services:
-  # ============================================================================
-  #  VECTOR DATABASE
-  # ============================================================================
-
   # ──────────────────────────────────────────────────────────
   # 💎 Qdrant - Vector Database
   # ──────────────────────────────────────────────────────────
@@ -51,49 +46,8 @@ services:
       retries: 3
       start_period: 20s
 
-  # ============================================================================
-  #  INFERENCE ENGINES (GPU)
-  # ============================================================================
-
   # ──────────────────────────────────────────────────────────
-  # 🦙 Ollama - Multi-Model Inference (Fallback / Chat)
-  # Uses GPU when vLLM isn't loaded; shares VRAM dynamically
-  # ──────────────────────────────────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    restart: unless-stopped
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-      - NVIDIA_VISIBLE_DEVICES=all
-      - OLLAMA_NUM_PARALLEL=2
-      - OLLAMA_MAX_LOADED_MODELS=2
-      - OLLAMA_KEEP_ALIVE=10m
-    volumes:
-      - /mnt/user/appdata/ollama:/root/.ollama
-    ports:
-      - "11434:11434"
-    networks:
-      ai_net:
-        ipv4_address: 172.25.0.15
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['0']
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
-  # ──────────────────────────────────────────────────────────
-  # ⚡ vLLM - High-Performance Inference
-  # Primary inference engine for RAG/API workloads
-  # GPU: 70% of 12GB = ~8.4GB VRAM
+  # ⚡ vLLM - Primary Inference Engine (80% VRAM)
   # ──────────────────────────────────────────────────────────
   vllm:
     image: vllm/vllm-openai:v0.6.5
@@ -102,6 +56,7 @@ services:
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - HF_HOME=/root/.cache/huggingface
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
     volumes:
       - /mnt/user/appdata/ai-models:/root/.cache/huggingface
       - /mnt/user/appdata/huggingface/models:/models:ro
@@ -115,13 +70,18 @@ services:
       - --dtype
       - half
       - --gpu-memory-utilization
-      - "0.70"
+      - "0.80"
       - --max-model-len
       - "8192"
+      - --max-num-seqs
+      - "8"
       - --port
       - "8000"
       - --host
       - "0.0.0.0"
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - hermes
     networks:
       ai_net:
         ipv4_address: 172.25.0.20
@@ -140,8 +100,7 @@ services:
       start_period: 180s
 
   # ──────────────────────────────────────────────────────────
-  # 📐 TEI Embeddings - Text Embedding Inference
-  # GPU: ~20% of 12GB = ~2.4GB VRAM
+  # 📐 TEI Embeddings (~1.5GB VRAM)
   # ──────────────────────────────────────────────────────────
   embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:1.5
@@ -177,25 +136,26 @@ services:
       retries: 5
       start_period: 120s
 
-  # ============================================================================
-  #  FRONTENDS & RAG
-  # ============================================================================
-
   # ──────────────────────────────────────────────────────────
-  # 💬 OpenWebUI - Chat Interface for Ollama/vLLM
+  # 💬 OpenWebUI - Chat Interface
+  # Connects to: Brawn vLLM (local) + Brain vLLM (remote)
   # ──────────────────────────────────────────────────────────
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: openwebui
     restart: unless-stopped
     environment:
-      - OLLAMA_BASE_URL=http://172.25.0.15:11434
-      - OPENAI_API_BASE_URL=http://172.25.0.20:8000/v1
+      - OPENAI_API_BASE_URLS=http://172.25.0.20:8000/v1;http://${BRAIN_IP:-192.168.1.9}:8000/v1
+      - OPENAI_API_KEYS=sk-brawn-local;sk-brain-remote
       - WEBUI_AUTH=true
+      - WEBUI_NAME=Chimera AI
       - ENABLE_RAG_WEB_SEARCH=true
       - RAG_WEB_SEARCH_ENGINE=searxng
       - SEARXNG_QUERY_URL=http://192.168.1.222:8888/search?q=<query>
       - ENABLE_RAG_HYBRID_SEARCH=true
+      - RAG_EMBEDDING_ENGINE=openai
+      - RAG_OPENAI_API_BASE_URL=http://172.25.0.30:80/v1
+      - RAG_OPENAI_API_KEY=sk-local
     volumes:
       - /mnt/user/appdata/openwebui:/app/backend/data
     ports:
@@ -204,7 +164,7 @@ services:
       ai_net:
         ipv4_address: 172.25.0.35
     depends_on:
-      ollama:
+      vllm:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
@@ -251,10 +211,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # ============================================================================
-  #  AUTOMATION
-  # ============================================================================
-
   # ──────────────────────────────────────────────────────────
   # ⚙️ n8n - Workflow Automation
   # ──────────────────────────────────────────────────────────
@@ -284,12 +240,8 @@ services:
       retries: 3
       start_period: 30s
 
-  # ============================================================================
-  #  VOICE PIPELINE (Wyoming Protocol)
-  # ============================================================================
-
   # ──────────────────────────────────────────────────────────
-  # 🎤 Whisper - Speech-to-Text
+  # 🎤 Whisper - Speech-to-Text (Wyoming)
   # ──────────────────────────────────────────────────────────
   whisper:
     image: rhasspy/wyoming-whisper:latest
@@ -315,7 +267,7 @@ services:
         ipv4_address: 172.25.0.60
 
   # ──────────────────────────────────────────────────────────
-  # 🔊 Piper - Text-to-Speech
+  # 🔊 Piper - Text-to-Speech (Wyoming)
   # ──────────────────────────────────────────────────────────
   piper:
     image: rhasspy/wyoming-piper:latest

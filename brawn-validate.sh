@@ -1,176 +1,171 @@
 #!/bin/bash
 ###############################################################################
-# brawn-validate.sh
-# Run after deploying all Portainer stacks to verify everything is healthy
-#
-# Usage: bash brawn-validate.sh
+# brawn-validate.sh (vLLM Only — No Ollama)
+# Usage: bash brawn-validate.sh [BRAIN_IP]
 ###############################################################################
 
 set -uo pipefail
 
-G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; B='\033[1;34m'; C='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
+BRAIN_IP="${1:-}"
+BRAWN_IP="192.168.1.222"
+HA_IP="192.168.1.149"
+
+G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; C='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
 ok()   { echo -e "  ${G}✓${NC} $1"; }
 warn() { echo -e "  ${Y}!${NC} $1"; }
 fail() { echo -e "  ${R}✗${NC} $1"; }
 section() { echo -e "\n${BOLD}${C}─── $1 ───${NC}"; }
 
-IP="192.168.1.222"
 pass=0; total=0
 
 check_http() {
-  local port=$1 name=$2 path=${3:-/}
+  local ip=$1 port=$2 name=$3 path=${4:-/}
   ((total++))
-  code=$(curl -sk -o /dev/null -w "%{http_code}" "http://${IP}:${port}${path}" --max-time 5 2>/dev/null || echo "000")
+  code=$(curl -sk -o /dev/null -w "%{http_code}" "http://${ip}:${port}${path}" --max-time 5 2>/dev/null || echo "000")
   if [[ "$code" =~ ^(200|301|302|303|307|308)$ ]]; then
-    ok "$name (:$port) — HTTP $code"
-    ((pass++))
+    ok "$name (${ip}:${port}) — $code"; ((pass++))
   else
-    fail "$name (:$port) — HTTP $code"
+    fail "$name (${ip}:${port}) — $code"
   fi
 }
 
 check_tcp() {
-  local port=$1 name=$2
+  local ip=$1 port=$2 name=$3
   ((total++))
-  if timeout 3 bash -c "echo > /dev/tcp/${IP}/${port}" 2>/dev/null; then
-    ok "$name (:$port) — TCP open"
-    ((pass++))
+  if timeout 3 bash -c "echo > /dev/tcp/${ip}/${port}" 2>/dev/null; then
+    ok "$name (${ip}:${port})"; ((pass++))
   else
-    fail "$name (:$port) — not listening"
+    fail "$name (${ip}:${port})"
   fi
 }
 
 echo ""
 echo "╔══════════════════════════════════════════════════╗"
-echo "║   BRAWN Service Validation                      ║"
-echo "║   $(date '+%Y-%m-%d %H:%M:%S')                          ║"
+echo "║   CHIMERA Validation — $(date '+%Y-%m-%d %H:%M')            ║"
+echo "║   Brawn: $BRAWN_IP | vLLM Only              ║"
+[ -n "$BRAIN_IP" ] && \
+echo "║   Brain: $BRAIN_IP                         ║"
 echo "╚══════════════════════════════════════════════════╝"
 
-# ── CORE INFRASTRUCTURE ──
+# ── CORE ──
 section "Core Infrastructure"
-check_http 8008 "Portainer"
-check_http 8010 "Homepage" "/api/widgets"
-check_http 3010 "Uptime Kuma"
-check_http 9999 "Dozzle"
-check_http 1880 "Node-RED"
-check_tcp  1883 "MQTT Broker"
-check_http 61208 "Glances" "/api/4/cpu"
-check_http 8888 "SearXNG"
-check_http 8191 "FlareSolverr"
-check_http 3100 "Browserless"
+check_http $BRAWN_IP 8008  "Portainer"
+check_http $BRAWN_IP 8010  "Homepage"
+check_http $BRAWN_IP 3010  "Uptime Kuma"
+check_http $BRAWN_IP 9999  "Dozzle"
+check_http $BRAWN_IP 1880  "Node-RED"
+check_tcp  $BRAWN_IP 1883  "MQTT"
+check_http $BRAWN_IP 61208 "Glances" "/api/4/cpu"
+check_http $BRAWN_IP 8888  "SearXNG"
+check_http $BRAWN_IP 8191  "FlareSolverr"
+check_http $BRAWN_IP 3100  "Browserless"
 
-# ── MEDIA STACK ──
+# ── MEDIA ──
 section "Media Stack"
-check_http 9090 "Zurg" "/dav/"
-check_http 32400 "Plex" "/web"
-check_http 8096 "Jellyfin" "/health"
-check_http 9696 "Prowlarr" "/ping"
-check_http 8989 "Sonarr" "/ping"
-check_http 7878 "Radarr" "/ping"
-check_http 8686 "Lidarr" "/ping"
-check_http 6767 "Bazarr" "/ping"
-check_http 5055 "Overseerr" "/api/v1/status"
-check_http 8181 "Tautulli" "/status"
-check_http 6500 "RDT-Client"
-check_http 8090 "qBittorrent"
+check_http $BRAWN_IP 9090  "Zurg" "/dav/"
+check_http $BRAWN_IP 32400 "Plex" "/web"
+check_http $BRAWN_IP 8096  "Jellyfin" "/health"
+check_http $BRAWN_IP 9696  "Prowlarr" "/ping"
+check_http $BRAWN_IP 8989  "Sonarr" "/ping"
+check_http $BRAWN_IP 7878  "Radarr" "/ping"
+check_http $BRAWN_IP 8686  "Lidarr" "/ping"
+check_http $BRAWN_IP 6767  "Bazarr" "/ping"
+check_http $BRAWN_IP 5055  "Overseerr" "/api/v1/status"
+check_http $BRAWN_IP 8181  "Tautulli" "/status"
+check_http $BRAWN_IP 6500  "RDT-Client"
+check_http $BRAWN_IP 8090  "qBittorrent"
 
-# Check rclone mount
-echo ""
-if [ -d "/mnt/user/media/zurg_RD" ] && ls /mnt/user/media/zurg_RD/ &>/dev/null; then
-  contents=$(ls /mnt/user/media/zurg_RD/ 2>/dev/null | head -5)
-  if [ -n "$contents" ]; then
-    ok "Rclone Zurg mount has content"
-    ((pass++))
-  else
-    warn "Rclone Zurg mount exists but empty"
-  fi
-  ((total++))
-else
-  fail "Rclone Zurg mount not accessible"
-  ((total++))
-fi
+# ── AI ──
+section "AI Stack (vLLM Only)"
+check_http $BRAWN_IP 8002  "vLLM Brawn" "/health"
+check_http $BRAWN_IP 8001  "Embeddings" "/health"
+check_http $BRAWN_IP 6333  "Qdrant" "/healthz"
+check_http $BRAWN_IP 3000  "OpenWebUI"
+check_http $BRAWN_IP 3002  "AnythingLLM" "/api/ping"
+check_http $BRAWN_IP 5678  "n8n" "/healthz"
+check_tcp  $BRAWN_IP 10300 "Whisper"
+check_tcp  $BRAWN_IP 10200 "Piper"
 
-# ── AI STACK ──
-section "AI Stack"
-check_http 11434 "Ollama"
-check_http 3000  "OpenWebUI"
-check_http 8002  "vLLM" "/health"
-check_http 8001  "Embeddings" "/health"
-check_http 6333  "Qdrant" "/healthz"
-check_http 3002  "AnythingLLM" "/api/ping"
-check_http 5678  "n8n" "/healthz"
-check_tcp  10300 "Whisper STT"
-check_tcp  10200 "Piper TTS"
-
-# GPU check
-echo ""
+# GPU
 if command -v nvidia-smi &>/dev/null; then
-  gpu_util=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader 2>/dev/null | head -1)
-  gpu_mem=$(nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader 2>/dev/null | head -1)
-  ok "GPU: ${gpu_util} util, ${gpu_mem} memory"
+  echo ""
+  mem=$(nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader 2>/dev/null | head -1)
+  ok "RTX 4070: $mem"
 fi
 
-# Quick inference test
+# Inference tests
 echo ""
-vllm_test=$(curl -sk -X POST "http://${IP}:8002/v1/chat/completions" \
+((total++))
+resp=$(curl -sk -X POST "http://${BRAWN_IP}:8002/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{"model":"Qwen/Qwen2.5-7B-Instruct-AWQ","messages":[{"role":"user","content":"Say OK"}],"max_tokens":5}' \
   --max-time 30 2>/dev/null)
-if echo "$vllm_test" | grep -q "content"; then
-  ok "vLLM inference test — PASSED"
-  ((pass++))
+if echo "$resp" | grep -q "content"; then
+  ok "Brawn vLLM inference — PASSED"; ((pass++))
 else
-  warn "vLLM inference test — no response (may still be loading)"
+  fail "Brawn vLLM inference — no response"
 fi
+
 ((total++))
+eresp=$(curl -s "http://${BRAWN_IP}:8001/embed" \
+  -H "Content-Type: application/json" \
+  -d '{"inputs":"test"}' --max-time 10 2>/dev/null)
+if echo "$eresp" | grep -q "\["; then
+  ok "Embeddings — PASSED"; ((pass++))
+else
+  fail "Embeddings — no vector"
+fi
 
 # ── STORAGE ──
 section "Storage"
-check_http 8443 "Nextcloud"
+check_http $BRAWN_IP 8443  "Nextcloud"
 
-# ── HOME ASSISTANT ──
-section "Home Assistant Integration"
-if ping -c 1 -W 2 192.168.1.149 &>/dev/null; then
-  ok "Home Assistant reachable (192.168.1.149)"
-  ((pass++))
-else
-  fail "Home Assistant unreachable"
+# ── BRAIN ──
+if [ -n "$BRAIN_IP" ]; then
+  section "Brain (NODE B) — $BRAIN_IP"
+
+  ((total++))
+  if ping -c 1 -W 2 "$BRAIN_IP" &>/dev/null; then
+    ok "Brain reachable"; ((pass++))
+  else
+    fail "Brain unreachable"
+  fi
+
+  check_http $BRAIN_IP 8000  "Brain vLLM" "/health"
+  check_http $BRAIN_IP 3000  "Brain OpenWebUI"
+
+  echo ""
+  ((total++))
+  bresp=$(curl -sk -X POST "http://${BRAIN_IP}:8000/v1/models" --max-time 5 2>/dev/null)
+  if echo "$bresp" | grep -q "id"; then
+    model=$(echo "$bresp" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    ok "Brain vLLM model: $model"; ((pass++))
+  else
+    warn "Brain vLLM — no model info"
+  fi
+
+  latency=$(ping -c 3 -W 2 "$BRAIN_IP" 2>/dev/null | tail -1 | awk -F'/' '{print $5}')
+  [ -n "$latency" ] && ok "Latency: ${latency}ms"
 fi
+
+# ── HA ──
+section "Home Assistant"
 ((total++))
+ping -c 1 -W 2 $HA_IP &>/dev/null && { ok "HA reachable ($HA_IP)"; ((pass++)); } || fail "HA unreachable"
 
-# MQTT sensor check
-mqtt_test=$(timeout 3 mosquitto_sub -h ${IP} -t 'homeassistant/#' -C 1 2>/dev/null)
-if [ -n "$mqtt_test" ]; then
-  ok "MQTT discovery messages flowing"
-  ((pass++))
-else
-  warn "No MQTT discovery messages (hass-unraid may need time)"
-fi
-((total++))
+# ── DOCKER ──
+section "Docker"
+running=$(docker ps -q 2>/dev/null | wc -l)
+unhealthy=$(docker ps --filter "health=unhealthy" -q 2>/dev/null | wc -l)
+echo "  Running: $running | Unhealthy: $unhealthy"
+[ "$unhealthy" -gt 0 ] && docker ps --filter "health=unhealthy" --format "  ${R}✗${NC} {{.Names}}" 2>/dev/null
 
-# ── DOCKER OVERVIEW ──
-section "Docker Summary"
-running=$(docker ps --format '{{.Names}}' | wc -l)
-stopped=$(docker ps -a --filter "status=exited" --format '{{.Names}}' | wc -l)
-echo "  Running: $running | Stopped: $stopped"
+# ── SCORE ──
 echo ""
-
-if [ "$stopped" -gt 0 ]; then
-  warn "Stopped containers:"
-  docker ps -a --filter "status=exited" --format "    {{.Names}} ({{.Status}})" | head -10
-fi
-
-# ── FINAL SCORE ──
-echo ""
-echo "╔══════════════════════════════════════════════════╗"
 pct=$((pass * 100 / total))
-if [ "$pct" -ge 90 ]; then
-  color="$G"
-elif [ "$pct" -ge 70 ]; then
-  color="$Y"
-else
-  color="$R"
-fi
-printf "║  Score: ${color}%d/%d (%d%%)${NC}%*s║\n" "$pass" "$total" "$pct" $((35 - ${#pass} - ${#total} - ${#pct})) ""
+[ "$pct" -ge 90 ] && c="$G" || { [ "$pct" -ge 70 ] && c="$Y" || c="$R"; }
+echo "╔══════════════════════════════════════════════════╗"
+printf "║  Score: ${c}%d/%d (%d%%)${NC}%*s║\n" "$pass" "$total" "$pct" $((35 - ${#pass} - ${#total} - ${#pct})) ""
 echo "╚══════════════════════════════════════════════════╝"
+[ -z "$BRAIN_IP" ] && echo "" && echo "  Tip: bash brawn-validate.sh BRAIN_IP"
 echo ""
