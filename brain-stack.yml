@@ -23,7 +23,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.30.0.0/16
+        - subnet: 172.31.0.0/16
 
 services:
   # ──────────────────────────────────────────────────────────
@@ -38,8 +38,14 @@ services:
     environment:
       - HF_HOME=/root/.cache/huggingface
       - HSA_OVERRIDE_GFX_VERSION=11.0.0
+      - ROCM_PATH=/opt/rocm
       - PYTORCH_ROCM_ARCH=gfx1100
       - HIP_VISIBLE_DEVICES=0
+      - VLLM_ROCM_USE_AITER=1
+      - VLLM_ROCM_USE_AITER_RMSNORM=1
+      - VLLM_ROCM_USE_AITER_MOE=1
+      - VLLM_USE_TRITON_FLASH_ATTN=0
+      - HIP_FORCE_DEV_KERNARG=1
     volumes:
       - /home/brains/ai-models:/root/.cache/huggingface
     ports:
@@ -95,8 +101,14 @@ services:
   #   environment:
   #     - HF_HOME=/root/.cache/huggingface
   #     - HSA_OVERRIDE_GFX_VERSION=11.0.0
+  #     - ROCM_PATH=/opt/rocm
   #     - PYTORCH_ROCM_ARCH=gfx1100
   #     - HIP_VISIBLE_DEVICES=0
+  #     - VLLM_ROCM_USE_AITER=1
+  #     - VLLM_ROCM_USE_AITER_RMSNORM=1
+  #     - VLLM_ROCM_USE_AITER_MOE=1
+  #     - VLLM_USE_TRITON_FLASH_ATTN=0
+  #     - HIP_FORCE_DEV_KERNARG=1
   #   volumes:
   #     - /home/brains/ai-models:/root/.cache/huggingface
   #   ports:
