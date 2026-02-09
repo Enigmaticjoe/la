@@ -74,7 +74,7 @@ services:
       - hermes
     networks:
       brain_net:
-        ipv4_address: 172.30.0.10
+        ipv4_address: 172.31.0.10
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
@@ -132,7 +132,7 @@ services:
   #     - auto
   #   networks:
   #     brain_net:
-  #       ipv4_address: 172.30.0.11
+  #       ipv4_address: 172.31.0.11
   #   devices:
   #     - /dev/kfd:/dev/kfd
   #     - /dev/dri:/dev/dri
@@ -155,7 +155,7 @@ services:
     container_name: brain-openwebui
     restart: unless-stopped
     environment:
-      - OPENAI_API_BASE_URLS=http://172.30.0.10:8000/v1
+      - OPENAI_API_BASE_URLS=http://172.31.0.10:8000/v1
       - OPENAI_API_KEYS=sk-brain-local
       - WEBUI_AUTH=true
       - WEBUI_NAME=Brain AI
@@ -165,7 +165,7 @@ services:
       - "3000:8080"
     networks:
       brain_net:
-        ipv4_address: 172.30.0.30
+        ipv4_address: 172.31.0.30
     depends_on:
       vllm:
         condition: service_healthy
