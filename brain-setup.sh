@@ -37,6 +37,11 @@ if command -v rocm-smi &>/dev/null; then
   ok "rocm-smi found"
   rocm-smi --showproductname 2>/dev/null | grep -i "card\|name" | head -2 | while read line; do info "  $line"; done
   rocm-smi --showmeminfo vram 2>/dev/null | grep -i "total\|used" | head -2 | while read line; do info "  $line"; done
+  if command -v rocminfo &>/dev/null; then
+    rocminfo | grep -q "gfx1100" && ok "rocminfo reports gfx1100 (RX 7900 XT class)" || warn "rocminfo missing gfx1100 — check ROCm install"
+  else
+    warn "rocminfo not installed"
+  fi
 else
   if lspci | grep -qi "amd.*navi\|amd.*radeon"; then
     warn "AMD GPU detected but rocm-smi not installed"
@@ -49,6 +54,26 @@ fi
 [ -e /dev/kfd ] && ok "/dev/kfd exists" || fail "/dev/kfd missing — ROCm kernel driver not loaded"
 [ -d /dev/dri ] && ok "/dev/dri exists" || fail "/dev/dri missing"
 ls /dev/dri/render* &>/dev/null && ok "Render nodes available" || warn "No render nodes in /dev/dri"
+[ -d /opt/rocm ] && ok "/opt/rocm present" || warn "/opt/rocm missing — ROCm runtime not installed"
+
+if [ -z "${HSA_OVERRIDE_GFX_VERSION:-}" ]; then
+  warn "HSA_OVERRIDE_GFX_VERSION not set (expected 11.0.0 for gfx1100)"
+else
+  ok "HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION}"
+fi
+
+if [ -z "${ROCM_PATH:-}" ]; then
+  warn "ROCM_PATH not set (expected /opt/rocm)"
+else
+  ok "ROCM_PATH=${ROCM_PATH}"
+fi
+
+if [ -z "${HSA_OVERRIDE_GFX_VERSION:-}" ] || [ -z "${ROCM_PATH:-}" ]; then
+  info "Suggested /etc/environment entries:"
+  info "  HSA_OVERRIDE_GFX_VERSION=11.0.0"
+  info "  ROCM_PATH=/opt/rocm"
+  info "  HIP_VISIBLE_DEVICES=0"
+fi
 
 # ── DOCKER ──
 section "DOCKER"

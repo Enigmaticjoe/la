@@ -23,7 +23,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.30.0.0/16
+        - subnet: 172.31.0.0/16
 
 services:
   # ──────────────────────────────────────────────────────────
@@ -38,8 +38,14 @@ services:
     environment:
       - HF_HOME=/root/.cache/huggingface
       - HSA_OVERRIDE_GFX_VERSION=11.0.0
+      - ROCM_PATH=/opt/rocm
       - PYTORCH_ROCM_ARCH=gfx1100
       - HIP_VISIBLE_DEVICES=0
+      - VLLM_ROCM_USE_AITER=1
+      - VLLM_ROCM_USE_AITER_RMSNORM=1
+      - VLLM_ROCM_USE_AITER_MOE=1
+      - VLLM_USE_TRITON_FLASH_ATTN=0
+      - HIP_FORCE_DEV_KERNARG=1
     volumes:
       - /home/brains/ai-models:/root/.cache/huggingface
     ports:
@@ -68,7 +74,7 @@ services:
       - hermes
     networks:
       brain_net:
-        ipv4_address: 172.30.0.10
+        ipv4_address: 172.31.0.10
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
@@ -95,8 +101,14 @@ services:
   #   environment:
   #     - HF_HOME=/root/.cache/huggingface
   #     - HSA_OVERRIDE_GFX_VERSION=11.0.0
+  #     - ROCM_PATH=/opt/rocm
   #     - PYTORCH_ROCM_ARCH=gfx1100
   #     - HIP_VISIBLE_DEVICES=0
+  #     - VLLM_ROCM_USE_AITER=1
+  #     - VLLM_ROCM_USE_AITER_RMSNORM=1
+  #     - VLLM_ROCM_USE_AITER_MOE=1
+  #     - VLLM_USE_TRITON_FLASH_ATTN=0
+  #     - HIP_FORCE_DEV_KERNARG=1
   #   volumes:
   #     - /home/brains/ai-models:/root/.cache/huggingface
   #   ports:
@@ -120,7 +132,7 @@ services:
   #     - auto
   #   networks:
   #     brain_net:
-  #       ipv4_address: 172.30.0.11
+  #       ipv4_address: 172.31.0.11
   #   devices:
   #     - /dev/kfd:/dev/kfd
   #     - /dev/dri:/dev/dri
@@ -143,7 +155,7 @@ services:
     container_name: brain-openwebui
     restart: unless-stopped
     environment:
-      - OPENAI_API_BASE_URLS=http://172.30.0.10:8000/v1
+      - OPENAI_API_BASE_URLS=http://172.31.0.10:8000/v1
       - OPENAI_API_KEYS=sk-brain-local
       - WEBUI_AUTH=true
       - WEBUI_NAME=Brain AI
@@ -153,7 +165,7 @@ services:
       - "3000:8080"
     networks:
       brain_net:
-        ipv4_address: 172.30.0.30
+        ipv4_address: 172.31.0.30
     depends_on:
       vllm:
         condition: service_healthy
