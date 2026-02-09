@@ -1,0 +1,623 @@
+﻿A
+Technical Analysis and Deployment Architecture: High-Performance LLM Inference on Consumer Hardware (NVIDIA RTX 4070 / Unraid)
+1. Executive Summary
+The democratization of Large Language Models (LLMs) has precipitated a shift from centralized, hyperscale cloud inference to localized, privacy-centric deployment strategies on consumer-grade hardware. This report provides an exhaustive technical analysis of deploying a production-ready Generative AI stack—comprising vLLM, Text Generation Inference (TGI), and Text Embeddings Inference (TEI)—on a server running Unraid OS equipped with an NVIDIA GeForce RTX 4070.
+The primary objective of this analysis is to diagnose and resolve two critical classes of failure encountered during the deployment phase: environment pathing errors within the model preparation workflow (huggingface-cli: command not found) and severe runtime instability within the vLLM inference engine (Engine core initialization failed). These failures are symptomatic of deeper architectural conflicts between the bleeding-edge "V1" engine architecture of vLLM, the resource constraints of the AD104 (Ada Lovelace) GPU silicon, and the unique, ephemeral nature of the Unraid operating system.   
+This document establishes that the successful remediation of these issues requires a paradigm shift from monolithic host-based management to a fully containerized, transient workflow for dependency management, alongside a strategic rollback of the vLLM engine architecture to its stable "V0" predecessor. Furthermore, the analysis mandates a rigorous quantization strategy, specifically leveraging the AWQ Marlin kernels or native FP8 capabilities of the RTX 40-series to strictly enforce memory residency within the 12GB VRAM envelope. By implementing the architectural overrides detailed herein—specifically VLLM_USE_V1=0 and utilizing Python module execution patterns—the deployment achieves enterprise-grade stability suitable for Retrieval-Augmented Generation (RAG) workflows integrating AnythingLLM and Qdrant.
+2. Infrastructure Analysis: The Constraints of Unraid and Ada Lovelace
+To understand the failures documented in the deployment logs, one must first dissect the foundational layers of the infrastructure: the operating system and the GPU architecture. The interplay between Unraid’s non-standard Linux environment and the high-performance computing requirements of modern inference engines creates specific friction points that are not present in standard Ubuntu or RHEL server deployments.
+2.1 The Unraid Operating Environment: Ephemerality and Dependency Hell
+Unraid is a specialized operating system designed primarily for Network Attached Storage (NAS) applications. Unlike general-purpose Linux distributions, Unraid boots from a USB flash device into a root filesystem loaded primarily into RAM. This architecture ensures high reliability for storage arrays but presents significant challenges for persistent application environments.
+2.1.1 The Slackware Lineage and "Pip" Absence
+Unraid is built atop Slackware Linux, one of the oldest and most conservative Linux distributions. A defining characteristic of the Unraid implementation is its minimal base image, which purposefully excludes development tools to minimize the security attack surface and system footprint. Crucially, this means the system lacks a native Python package manager (pip) and the associated compiler toolchains (gcc, make) required to build Python extensions.   
+The error encountered in the initial deployment script—/tmp/user.scripts/.../script: line 76: pip: command not found—is an expected behavior of this architecture. Attempting to install pip via third-party packages (like NerdPack) on the host is considered an anti-pattern in the Unraid ecosystem for several reasons:   
+1. Ephemerality: Any system-level changes made to the root filesystem are lost upon reboot unless complex persistence mechanisms are scripted. This leads to "drift," where a server works one day and fails after a power cycle.
+2. Dependency Conflicts: Unraid’s system services rely on specific, often older, versions of Python libraries. Installing packages globally via pip risks breaking core OS functionality (e.g., the web GUI or array management daemons).
+3. Path Isolation: Even if installed, binaries placed in /usr/local/bin may not be in the default $PATH for the non-interactive shells used by the Unraid "User Scripts" plugin.
+Therefore, the architectural imperative for Unraid deployments is Total Containerization. All logic requiring external dependencies must occur within a Docker container, isolating the runtime from the host OS limitations.
+2.2 GPU Architecture: The NVIDIA GeForce RTX 4070
+The NVIDIA GeForce RTX 4070 represents the mid-range tier of the Ada Lovelace architecture (AD104 die). While powerful, its specifications impose strict boundaries on model selection and concurrent workload execution.
+2.2.1 Memory Capacity: The 12GB Hard Ceiling
+The most critical constraint for LLM inference is Video Random Access Memory (VRAM). The RTX 4070 is equipped with 12 GB of GDDR6X memory. In the context of the user’s requested stack—running an LLM, an Embedder, and a Reranker simultaneously—this creates a tight resource budget.
+Component
+	VRAM Usage (FP16)
+	VRAM Usage (Int8)
+	VRAM Usage (AWQ 4-bit)
+	Implications
+	Qwen3-8B
+	~16 GB
+	~9 GB
+	~5.5 GB
+	Cannot fit in FP16. Requires quantization.
+	Qwen3-Embed-0.6B
+	~1.2 GB
+	~0.7 GB
+	N/A
+	Must remain resident for RAG.
+	BGE-Reranker-Large
+	~1.1 GB
+	~0.6 GB
+	N/A
+	Must remain resident for RAG.
+	Display/OS Overhead
+	~0.5 GB
+	~0.5 GB
+	~0.5 GB
+	Unraid is headless, but drivers consume VRAM.
+	KV Cache (Context)
+	Variable
+	Variable
+	Variable
+	Buffer needed for inference.
+	Total Static Load (with AWQ LLM): ~5.5 (LLM) + 1.2 (Embed) + 1.1 (Rerank) + 0.5 (OS) = 8.3 GB. Remaining for KV Cache: 12.0 - 8.3 = 3.7 GB.
+This analysis reveals that while the hardware can run the stack, it leaves a margin of error of less than 35%. If the inference engine (vLLM) attempts to pre-allocate its default 90% of VRAM (--gpu-memory-utilization 0.9), it will inevitably crash because other processes (TEI) already occupy ~25% of the memory.
+2.2.2 Tensor Cores and FP8 Support
+The Ada Lovelace architecture introduces 4th Generation Tensor Cores, which natively support FP8 (8-bit Floating Point) operations. This is a significant differentiator from the previous Ampere (RTX 30-series) generation.
+* Performance: FP8 offers throughput approaching INT8 but with the dynamic range of floating-point numbers, often preserving model accuracy better than integer quantization without requiring complex calibration steps.
+* vLLM Support: vLLM has recently added robust support for FP8 on Ada GPUs. However, as seen in the logs, the user initially attempted to use TGI (Text Generation Inference) with an AWQ model. TGI’s support for specific quantization kernels (like AWQ) is strictly tied to model architecture whitelists. The error TGI doesn't support AWQ quantization for Qwen3 models  indicates a mismatch between the software kernel support and the model architecture.   
+2.3 The Container Runtime: Docker and Multiprocessing
+Unraid uses Docker as its primary application delivery mechanism. While Docker provides isolation, it introduces complexity regarding Inter-Process Communication (IPC).
+* Shared Memory (/dev/shm): PyTorch-based applications like vLLM use shared memory to pass data between the CPU pre-processing threads and the GPU execution threads.
+* Docker Default: By default, Docker containers are allocated a paltry 64MB of shared memory. For high-performance inference, especially with vLLM's multiprocessing backend, this is insufficient and leads to immediate bus errors or silent crashes.   
+* Process Forking: The interaction between Python’s multiprocessing library and the CUDA runtime is fraught with peril. CUDA contexts cannot be safely forked. vLLM attempts to use the spawn method to circumvent this, but in restrictive container environments, the mechanism often fails to re-initialize the GPU context correctly in the child process, leading to the "Engine core initialization failed" error observed in the logs.   
+3. Deployment Phase 1: The Preparation Script Failure
+The first major hurdle in the deployment was the failure of the model preparation script. This script is essential because attempting to download 20GB+ of model weights during the runtime container startup often leads to timeouts (Portainer/Docker Compose typically enforce a 60-second startup timeout) or "zombie" containers if the download is interrupted.
+3.1 Failure Analysis: "huggingface-cli: command not found"
+The user attempted to execute a script that invoked huggingface-cli to download models. The logs show: bash: line 2: huggingface-cli: command not found  This error occurred even after the user switched to a Docker-based prep script using the python:3.11-slim image.   
+3.1.1 The PATH Variable Mechanism
+In Linux environments, when a command is typed without an absolute path (e.g., huggingface-cli vs /usr/local/bin/huggingface-cli), the shell consults the $PATH environment variable—a colon-separated list of directories—to locate the executable.
+1. Installation Location: When pip install huggingface_hub[cli] is executed inside a Debian-based container (like python:3.11-slim), the binaries are typically installed into /usr/local/bin (if root) or /home/user/.local/bin (if non-root).
+2. Shell Hashing: To optimize performance, shells like bash maintain a hash table of command locations. If pip install places a new binary in a directory that is in the path, but the shell has already cached the "not found" state or has not re-indexed the directories, immediate execution can fail.
+3. Script Context: The user script is executing a sequence of commands passed to bash -c. If the environment variables are not re-sourced after the pip install step, the current shell process does not know about the new executables.
+3.1.2 The Architectural Resolution: Python Module Execution
+The definitive solution to this problem, as implemented in the final remediation strategy, is to bypass the shell's PATH resolution mechanism entirely and invoke the Python module directly.
+* Vulnerable Command: huggingface-cli download... (Relies on shell PATH, symlinks, and executable permissions).
+* Robust Command: python -m huggingface_hub.cli download... (Relies only on the Python interpreter finding the library).
+Since the script just installed the library via pip, the Python interpreter is guaranteed to have the package in its site-packages. Invoking it via -m (module) ensures that the entry point is executed regardless of where the shell wrapper script was placed.   
+3.2 Optimization: Accelerating Downloads with hf_transfer
+The prep script was further optimized by including hf_transfer. The standard Python-based download logic in huggingface_hub can be CPU-bound and inefficient with high-bandwidth connections due to the Python Global Interpreter Lock (GIL).
+* hf_transfer: A Rust-based library that provides high-performance, parallelized file transfers.
+* Integration: By setting the environment variable HF_HUB_ENABLE_HF_TRANSFER=1 , the prep script delegates the heavy network I/O to the Rust backend, significantly reducing the downtime during the model acquisition phase. This is crucial for models like Qwen3-8B which can exceed 15GB.   
+3.3 The Transient Container Pattern
+The fundamental shift in the final successful script  is the use of the Transient Container Pattern. Instead of trying to "fix" the host, the script:   
+1. Spins up a python:3.11-slim container.
+2. Mounts the host's /mnt/user/appdata/huggingface directory to /data inside the container.
+3. Performs the work (pip install, download).
+4. Corrects permissions (chown 99:100) to match the Unraid host user.
+5. Terminates and removes itself (--rm).
+This ensures that the host OS remains pristine while the application data is persistently stored in the array, accessible to the inference containers that follow.
+4. Deployment Phase 2: The Inference Engine Crisis (vLLM)
+Following the model download, the user transitioned to deploying the inference stack. The initial attempt using TGI failed due to quantization incompatibility (manifest unknown and quantization rejection). The pivot to vLLM was architecturally sound, as vLLM generally offers broader support for consumer hardware quantization formats like AWQ. However, this introduced a new, critical failure:   
+RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}
+   
+4.1 Root Cause Analysis: The "V1" Engine Architecture
+To understand this crash, we must analyze the recent architectural schism within the vLLM project. Starting with version 0.10+ and solidified in 0.15.1, vLLM introduced the V1 Engine.   
+4.1.1 V0 vs. V1 Architecture
+* V0 Engine (Legacy): Uses a synchronous or simply-threaded model where the scheduler, KV cache manager, and model executor run in tight coordination. It relies on a "Block Manager" for PagedAttention. It is battle-tested and stable on a wide variety of hardware configurations.
+* V1 Engine (Next-Gen): Designed for extreme performance and lower CPU overhead. It separates the "Engine Core" into a distinct subprocess (or set of processes) to allow for asynchronous request handling and better overlapping of CPU/GPU tasks. It replaces the Block Manager with a stateless executor design.   
+4.1.2 The Crash Mechanism
+The error Engine core initialization failed is specific to the V1 architecture. It indicates that the subprocess responsible for the Engine Core either died immediately upon spawning or failed to establish the ZeroMQ/IPC handshake with the API server process.   
+This failure is prevalent in Docker environments on consumer hardware for several reasons:
+1. Multiprocessing Context: The V1 engine relies heavily on Python's multiprocessing. As noted in section 2.3, initializing CUDA in a forked process is illegal. While vLLM uses spawn, the environment isolation in Docker (specifically regarding /dev/shm and /proc visibility) can cause the spawned process to fail to initialize the CUDA driver correctly.
+2. Memory Fragmentation: The V1 engine performs a rigorous memory profiling step at startup. On the RTX 4070, which is already running TEI containers (consuming ~2.5GB VRAM), the memory is fragmented. If vLLM attempts to allocate a contiguous slab of memory for the KV cache and fails due to fragmentation or insufficient total capacity, the core process panics and exits. The parent process, waiting for a "Ready" signal, times out and reports initialization failure.   
+3. Traceback Analysis: The log snippet asyncio/base_events.py  confirms that the failure propagates up to the asyncio event loop in the API server, which crashes when the underlying task (waiting for the engine core) raises an exception.   
+4.2 Remediation Strategy 1: The "Kill Switch" (VLLM_USE_V1=0)
+The most reliable solution for this specific crash on this specific hardware configuration is to force vLLM to use the legacy V0 architecture. The research snippets confirm that this is a known workaround for stability issues in versions 0.10.x through 0.15.x.   
+By setting the environment variable VLLM_USE_V1=0 in the Docker stack:
+1. vLLM reverts to the monolithic threading model.
+2. It bypasses the complex IPC initialization that is failing inside the container.
+3. It uses the mature Block Manager, which is more robust to the memory fragmentation caused by running alongside TEI containers.
+4.3 Remediation Strategy 2: Quantization and Kernel Selection
+The user initially attempted to use Qwen3-8B-AWQ. AWQ (Activation-aware Weight Quantization) is a 4-bit quantization format. On NVIDIA GPUs, specifically the Ada Lovelace generation, the standard GEMM-based AWQ kernel is suboptimal compared to the Marlin kernel.
+Marlin is a highly optimized FP16xINT4 matrix multiplication kernel. The logs indicate vLLM detecting the capability: The model is convertible to awq_marlin during runtime.   
+* The Fix: Explicitly passing --quantization awq_marlin tells vLLM to utilize this specific kernel. This improves inference throughput significantly on the RTX 4070 compared to generic AWQ, while maintaining the same memory footprint.   
+However, the final remediation in the chat logs shows an even smarter pivot: switching to FP8.
+* The stack was updated to use Qwen/Qwen3-4B-Instruct-2507-FP8.   
+* Why? The RTX 4070 supports native FP8. Using an FP8 model eliminates the dequantization overhead associated with 4-bit formats (converting Int4 -> FP16 on the fly). It provides a "middle ground" of memory usage (smaller than FP16, larger than Int4) but with potentially higher throughput on Ada hardware.
+* Memory Impact: The 4B parameter model in FP8 requires roughly 4GB of VRAM for weights. This is significantly less than the 8B AWQ model (which would be ~5-6GB). This strategic downsizing is crucial for stability when running concurrent embeddings services on a 12GB card.
+5. Comprehensive Solution: The Architecture of the Stack
+The final, production-ready stack orchestrates three distinct services. The following section breaks down the configuration of each, explaining the specific parameters chosen to resolve the identified faults.
+5.1 The Docker Compose Configuration (Portainer Stack)
+The configuration file (YAML) is the blueprint of the deployment. Below is the analyzed and rectified structure based on the research findings.
+5.1.1 Service: vLLM (The Inference Engine)
+YAML
+vllm:
+  image: vllm/vllm-openai:v0.15.1
+  runtime: nvidia
+  environment:
+    - VLLM_USE_V1=0                # Disables unstable V1 engine to prevent crash loops [8]
+    - NVIDIA_VISIBLE_DEVICES=all
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+  volumes:
+    - /mnt/user/appdata/huggingface/tgi-data:/models:ro  # Read-only mount for safety
+  command: >
+    --model /models/Qwen/Qwen3-4B-Instruct-2507-FP8
+    --quantization fp8             # Leverages Ada Lovelace Native FP8 Tensor Cores
+    --gpu-memory-utilization 0.65  # Strictly caps VRAM usage to ~7.8GB
+    --max-model-len 8192           # Limits context window to prevent OOM
+    --max-num-seqs 16              # Lowers concurrency to save KV cache memory
+Key Analysis:
+* VLLM_USE_V1=0: As discussed, this resolves the Engine core initialization failed error by reverting to the stable execution path.
+* --gpu-memory-utilization 0.65: This is a calculated value. 65% of 12GB is 7.8GB.
+   * 4B FP8 Model Weights: ~4.5GB (with overhead).
+   * KV Cache Buffer: 7.8GB - 4.5GB = 3.3GB.
+   * This leaves 12GB - 7.8GB = 4.2GB free on the GPU.
+* This 4.2GB "free" space is mandatory because the TEI containers (Embed and Rerank) require approximately 2.5GB combined, plus OS overhead. If this value were set to the default 0.90, vLLM would attempt to grab 10.8GB, immediately causing an Out-Of-Memory (OOM) crash or killing the TEI containers.
+5.1.2 Service: TEI (Embeddings & Rerank)
+YAML
+tei-embed:
+  image: ghcr.io/huggingface/text-embeddings-inference:89-1.8
+  command: --model-id /data/Qwen/Qwen3-Embedding-0.6B --auto-truncate
+Key Analysis:
+* Image Tag 89-1.8: The 89 refers to Compute Capability 8.9, which corresponds exactly to the Ada Lovelace architecture (RTX 40-series). Using this specific tag ensures the container includes kernels optimized for the 4070, specifically Flash Attention 2, which drastically speeds up embedding generation.
+* --auto-truncate: This flag is essential for RAG pipelines. If a user uploads a PDF with a massive text chunk, attempting to embed it without truncation will crash the server. This flag ensures the model silently handles oversized inputs by processing only the first N tokens (usually 8192 for this model).
+5.2 Network Architecture and Integration
+The stack exposes three ports:
+* 8880: vLLM (Chat Completions)
+* 8881: TEI (Embeddings)
+* 8882: TEI (Reranking)
+This separation of concerns allows the "Orchestrator" application—AnythingLLM—to route traffic appropriately.
+5.2.1 Integration with AnythingLLM
+AnythingLLM acts as the user interface and logic layer. For the RAG pipeline to function, it must be configured to utilize the exposed endpoints:
+1. LLM Preference: Set to "OpenAI Compatible". Base URL: http://192.168.1.xxx:8880/v1. This directs chat queries to the Qwen 4B model running on vLLM.
+2. Embedder Preference: Set to "Generic OpenAI" or "Local AI". Base URL: http://192.168.1.xxx:8881. Crucially, this connects to the TEI embedding service.
+3. Vector Database: The logs mention an existing Qdrant setup. AnythingLLM should be configured to connect to Qdrant (typically port 6333).
+Data Flow: User Query -> AnythingLLM -> TEI (8881) -> Vector (Floats) -> Qdrant (Search) -> Retrieved Chunks -> TEI (8882, Optional Rerank) -> Context + Query -> vLLM (8880) -> Final Answer.
+6. Optimization and Future Proofing
+6.1 Quantization Trade-offs: The 12GB Dilemma
+The decision to switch from Qwen3-8B-AWQ to Qwen3-4B-FP8 was dictated by the 12GB VRAM limit.
+* 8B AWQ: Requires ~5.5GB for weights. While it could fit alongside TEI, the context window would be severely limited (likely < 4k tokens). A RAG system with a small context window is ineffective as it cannot ingest sufficient retrieved documents.
+* 4B FP8: Requires ~4.5GB. The reduced parameter count frees up ~1GB of VRAM compared to the 8B model. This 1GB enables roughly 2000-4000 additional tokens of context, making the system far more usable for document analysis. Furthermore, the native FP8 execution on Ada Lovelace provides superior latency.
+6.2 Monitoring and Observability
+To maintain this stack, the user should utilize nvtop (NVIDIA Task Operations), a terminal-based GPU monitoring tool.
+* Metric to Watch: GPU Memory Used.
+* Failure Condition: If Memory Used hits 12282MiB, the GPU will swap to system RAM (if allowed) or terminate processes. System RAM swapping over PCIe is orders of magnitude slower (32GB/s vs 504GB/s) and renders the LLM unusable (tokens/second drops to < 1).
+* Tuning: If nvtop shows free memory during full load, the --gpu-memory-utilization parameter in vLLM can be incrementally increased (e.g., from 0.65 to 0.70) to expand the context window capacity.
+7. Conclusion
+The deployment of high-performance AI inference on consumer hardware is a balancing act between software capability and hardware capacity. The "huggingface-cli" failures were a symptom of the rigid security model of Unraid, solved by the Transient Container Pattern which decouples dependency management from the host OS. The vLLM "Engine core initialization" crashes were a manifestation of the immaturity of the V1 engine architecture in Dockerized consumer environments, resolved by strictly enforcing the stable V0 legacy engine and managing memory fragmentation.
+By acknowledging the physical limits of the RTX 4070’s 12GB VRAM and strategically selecting a smaller, natively-optimized FP8 model (Qwen3-4B), the system achieves a "Goldilocks" state: sufficient intelligence for reasoning, sufficient speed for interaction, and sufficient memory headroom for the semantic search components (TEI) that make RAG possible. This architecture provides a robust, localized, and private AI platform that rivals cloud-based solutions for personal and small-business use cases.
+  Untitled document (8).txt
+discuss.vllm.ai
+RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {'EngineCore_DP0': 1} - vLLM Forums
+Opens in a new window
+github.com
+[Bug]: Engine core initialization failed. See root cause above. Failed core proc(s): {} · Issue #19002 · vllm-project/vllm - GitHub
+Opens in a new window
+huggingface.co
+openai/gpt-oss-120b · vLLM FlashAttention3 with A6000 - Hugging Face
+Opens in a new window
+github.com
+[Bug]: Serving model in 0.15.0 Docker container hangs - 0.14.1 worked fine #33369 - GitHub
+Opens in a new window
+discuss.vllm.ai
+推理时报错RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {} - General - vLLM Forums
+Opens in a new window
+docs.vllm.ai
+vLLM V1
+Opens in a new window
+docs.vllm.ai
+vLLM V1
+Opens in a new window
+github.com
+[Bug]:RuntimeError: Engine core initialization failed. · Issue #18730 · vllm-project/vllm
+Opens in a new window
+github.com
+[Bug]: vLLM engine v1 with Qwen/Qwen3-Reranker-0.6B crashes with long input #24327
+Opens in a new window
+discuss.vllm.ai
+Build VLLM without installing gcc? - General - vLLM Forums
+Opens in a new window
+reddit.com
+We benchmarked every 4-bit quantization method in vLLM : r/LocalLLaMA - Reddit
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+Opens in a new window
+rchitectural Analysis: Orchestrating High-Performance RAG Pipelines on Unraid
+1. Executive Summary and Architectural Paradigm
+The contemporary landscape of self-hosted Artificial Intelligence (AI) infrastructure is undergoing a decisive shift from monolithic, all-in-one applications toward decoupled, microservices-based architectures. This transition is driven by the necessity for granular resource management, independent scalability, and the integration of specialized inference engines that outperform generalist solutions. This report provides an exhaustive technical analysis comparing AnythingLLM and Open WebUI as the orchestration layer for a specific, high-performance external stack comprising vLLM (inference), Text Embeddings Inference (TEI) (semantic vectorization), and Qdrant (vector storage).
+The analysis is grounded in a specific deployment context: an Unraid server environment restricted by the hardware limitations of a single NVIDIA GeForce RTX 4070 (12GB VRAM). This constraint transforms the deployment challenge from a simple software installation into a complex exercise in memory budgeting, quantization strategy, and container orchestration. The report synthesizes data from deployment logs, error traces, and documentation to determine the optimal frontend for this constrained yet powerful stack.
+1.1 The Decoupled Stack Architecture
+The proposed architecture moves beyond the standard "Ollama-plus-Frontend" setup often seen in hobbyist deployments. Instead, it leverages a "best-of-breed" component strategy:
+* The Cognitive Engine (vLLM): Utilizing the PagedAttention algorithm, vLLM provides state-of-the-art throughput and memory efficiency for serving Large Language Models (LLMs). It is selected over Text Generation Inference (TGI) due to superior support for AWQ (Activation-aware Weight Quantization) on consumer hardware.1
+* The Semantic Engine (TEI): A specialized server for embedding and reranking. By offloading these tasks to TEI, the system avoids CPU bottlenecks associated with local embedding libraries (like SentenceTransformers) running within the frontend container.3
+* The Knowledge Store (Qdrant): A high-performance vector database written in Rust, offering robust persistence and HNSW (Hierarchical Navigable Small World) indexing, essential for scalable Retrieval-Augmented Generation (RAG).4
+* The Orchestrator (Open WebUI vs. AnythingLLM): The user interface responsible for context management, prompt engineering, and binding the backend services into a cohesive user experience.
+1.2 Operational Constraints and Hardware Realities
+The NVIDIA RTX 4070, while a capable card, possesses a strict 12GB VRAM ceiling. This limitation is the defining variable in the architectural equation. Running a modern 8-billion parameter model (like Llama 3.1 8B) alongside an embedding model and a reranking model requires aggressive optimization. The raw model weights for an 8B model in FP16 precision consume approximately 16GB, exceeding the card's capacity immediately. Consequently, the use of quantization—specifically 4-bit AWQ or 8-bit FP8—is mandatory.1
+Furthermore, the "context window" usually advertised (128k tokens for Llama 3.1 or Qwen 2.5) is operationally impossible on a single 12GB card without massive offloading or context truncation. The logs provided 1 demonstrate critical failures where the inference engine attempts to allocate Key-Value (KV) cache for the full context window, resulting in immediate initialization crashes. The solution requires a disciplined approach to VRAM allocation, forcing context limits (e.g., 8192 tokens) to preserve stability.
+________________
+2. Infrastructure Deep Dive: The Inference Layer (vLLM)
+The choice of the inference backend is the most critical decision in the stack. While the user initially attempted to utilize Hugging Face's Text Generation Inference (TGI), the deployment logs reveal a fatal incompatibility that necessitated a strategic pivot to vLLM.
+2.1 The Failure of TGI and the Quantization Imperative
+The initial deployment attempt utilized TGI version 3.3.7. The logs show a catastrophic failure when attempting to load the Qwen/Qwen3-8B-AWQ model. The error trace identifies the root cause:
+"TGI doesn't support AWQ quantization for Qwen3 models — it falls back to AutoModel which explicitly rejects AWQ." 1
+This failure highlights a nuance in the inference ecosystem: support for specific model architectures (like Qwen2/3) combined with specific quantization formats (AWQ) is often asynchronous across different backends. TGI's fallback mechanism attempted to load the model using the generic transformers.AutoModel, which lacks the optimized kernels necessary to dequantize AWQ weights on the fly, leading to an asyncio loop crash within the container.1
+While the user successfully mitigated this by switching to an FP8 model (Qwen/Qwen3-4B-Instruct-2507-FP8) which TGI supports natively, the recommendation to switch to vLLM remains superior. vLLM's implementation of the Marlin kernel (awq_marlin) provides industry-leading performance for 4-bit quantized models on NVIDIA Ada Lovelace architectures (RTX 40-series).7
+2.2 vLLM Architecture and Configuration
+vLLM operates as a high-throughput server that mimics the OpenAI API specification. This standardization is crucial for frontend integration.
+2.2.1 The V1 vs. V0 Engine Transition
+Recent versions of vLLM (v0.14+) have introduced a significant architectural overhaul known as the V1 Engine. This engine redesigns the scheduler and KV cache manager to improve performance. However, on consumer hardware configurations, this transition has introduced instability. Snippets indicate that enabling the V1 engine (VLLM_USE_V1=1) can be experimental for certain concurrent embedding workloads or background threads.9
+Users must be aware that while V1 is becoming the default 10, it may exhibit compatibility issues with specific older quantization kernels. If instability persists—specifically "Engine core initialization failed" errors—explicitly falling back to the V0 engine (VLLM_USE_V1=0) serves as a viable remediation strategy until the V1 scheduler matures.
+2.2.2 Calculating the VRAM Budget
+The crash logs provided by the user 1 show a specific error:
+ValueError: The model's max seq len (131072) is larger than the maximum number of tokens that can be stored in KV cache (17840). 11
+This error is a mathematical certainty on the RTX 4070.
+* Total VRAM: 12 GB.
+* Model Weights (8B AWQ): ~5.5 GB.
+* System Overhead (Display/Desktop): ~0.5 - 1.0 GB.
+* TEI Containers (Embed + Rerank): ~1.5 GB combined.
+* Remaining for KV Cache: ~4.0 GB.
+A 128k context window requires significantly more than 4GB of KV cache (memory required to store attention keys and values for past tokens). When vLLM initializes, it profiles the available memory. If the requested max_model_len requires more blocks than available, it crashes.
+Remediation: The configuration must explicitly clamp the context length. Setting --max-model-len 8192 or --max-model-len 16384 forces vLLM to reserve a smaller cache, fitting the stack within the 12GB envelope. Additionally, the --gpu-memory-utilization flag should be set to 0.75 or 0.80 (rather than the default 0.90) to explicitly reserve space for the TEI containers running on the same GPU.1
+2.3 Containerization and Unraid Specifics
+Unraid presents a unique environment due to its Slackware-based OS which lacks a persistent package manager like pip or apt in the base system. The user encountered immediate failures when trying to run setup scripts directly on the host:
+"/tmp/user.scripts/.../script: line 76: pip: command not found" 1
+The solution implemented—and the correct architectural pattern for Unraid—is to encapsulate all dependency management within Docker. The deployment utilizes a python:3.11-slim container solely for the purpose of downloading models via the huggingface_hub library. This "Prep Container" pattern ensures that the host OS remains clean and that the large model files are stored in the persistent /mnt/user/appdata/ share, which is then mounted as read-only (:ro) volumes into the inference containers. This approach prevents the "container start timeout" issues that occur when large models are downloaded during the container's boot phase.1
+________________
+3. Infrastructure Deep Dive: The Semantic Layer (TEI)
+In a high-fidelity RAG pipeline, the generation of embeddings and the reranking of search results are as critical as the LLM itself. Text Embeddings Inference (TEI) is the specialized tool for this layer.
+3.1 The Necessity of TEI
+Standard frontend applications often bundle libraries like sentence-transformers or langchain to handle embeddings locally. On a server like Unraid, this often defaults to CPU execution, which is catastrophically slow for ingestion or high-concurrency retrieval. TEI runs these BERT-based models on the GPU (or optimized CPU backends), offering order-of-magnitude latency improvements.12
+3.2 Dual-Container Strategy
+The optimal configuration for this stack involves running two separate TEI instances:
+1. The Embedder (Port 8881): Configured with a model like Qwen/Qwen3-Embedding-0.6B. This instance handles the vectorization of user queries and document chunks. It is a high-throughput, low-latency workload.
+2. The Reranker (Port 8882): Configured with a cross-encoder model like BAAI/bge-reranker-large. Reranking is computationally heavier than embedding. It takes the top    results from the vector DB and performs a deep semantic comparison against the query, re-ordering them by relevance.
+By separating these into distinct containers, the architecture ensures that a heavy reranking job does not block the embedding API, allowing for asynchronous processing if the frontend supports it. The 89-1.8 tag of the TEI image is specifically verified for the RTX 4070, ensuring Flash Attention support is active.1
+3.3 Integration via OpenAI Protocol
+TEI exposes an API that mimics the OpenAI Embeddings endpoint. This is a vital compatibility feature. It allows frontends that only know how to "talk" to OpenAI to utilize this local, self-hosted service simply by changing the base URL environment variable. However, crucially, there is no standard OpenAI endpoint for Reranking. This divergence creates the primary differentiator between Open WebUI and AnythingLLM, as discussed in the frontend analysis.
+________________
+4. Infrastructure Deep Dive: The Vector Store (Qdrant)
+Qdrant serves as the persistent memory of the stack. Unlike simple in-memory vector stores (like Chroma's default mode) or flat-file indexes (FAISS), Qdrant is a production-grade database server.
+4.1 Configuration and Persistence
+On Unraid, Qdrant is deployed as a Docker container binding port 6333 (API) and 6334 (gRPC). Persistence is handled by mapping the /qdrant/storage internal directory to an Unraid share (e.g., /mnt/user/appdata/qdrant). This ensures that the vector index survives container restarts and upgrades.
+4.2 HNSW and Performance
+Qdrant utilizes Hierarchical Navigable Small World (HNSW) graphs for indexing. This allows for approximate nearest neighbor search with logarithmic complexity. For a single-user or small-team RAG setup (thousands to hundreds of thousands of vectors), Qdrant provides sub-millisecond retrieval times.
+4.3 Multi-Tenancy and Collections
+A critical aspect of RAG is data isolation. Qdrant supports "Collections" (analogous to tables in SQL).
+   * Open WebUI: Typically creates collections based on the embedding model used or specific user namespaces.
+   * AnythingLLM: Manages collections based on "Workspaces." Because the two frontends may use different naming conventions and payload structures (the metadata stored alongside the vectors), sharing a single Qdrant collection between both frontends is generally not feasible without significant manual schema alignment. However, a single Qdrant instance can happily host collections for both applications simultaneously.4
+________________
+5. Frontend Analysis: Open WebUI
+Open WebUI (formerly Ollama WebUI) has evolved into a comprehensive, highly extensible AI platform. Its architecture is designed to be "provider agnostic," making it a natural fit for the decoupled stack.
+5.1 Orchestration and Connectivity
+Open WebUI runs on port 3000 and is configured primarily via environment variables passed to the Docker container. This aligns perfectly with the "Infrastructure as Code" philosophy preferred by DevOps engineers.
+5.1.1 Connecting the Cognitive Layer
+Integration with vLLM is seamless. By setting the OPENAI_API_BASE_URL to http://<unraid-ip>:8880/v1 and the API key to a dummy value (e.g., sk-none), Open WebUI treats the local vLLM instance as a remote OpenAI endpoint. It automatically queries the /v1/models endpoint to populate the model selector dropdown, allowing the user to choose Qwen3-8B or any other model loaded in vLLM.14
+5.1.2 Native RAG Pipeline and External Reranking
+Open WebUI distinguishes itself with its advanced RAG pipeline capabilities. It natively supports the configuration of an external reranking engine via environment variables.
+   * Env Var: RAG_RERANKING_MODEL sets the model name.
+   * Env Var: RAG_EXTERNAL_RERANKER_URL allows the user to point directly to the TEI Reranker container (e.g., http://<unraid-ip>:8882/v1/rerank).
+This support is a decisive advantage. When a user queries documents, Open WebUI retrieves a broad set of candidates (e.g., Top 50) from Qdrant, sends them to the TEI Reranker, and then presents only the Top 5 highly relevant results to the LLM. This "Retrieve-then-Rerank" workflow drastically reduces hallucinations and improves the precision of answers, utilizing the hardware stack to its fullest potential.3
+5.2 Advanced Configuration: The "Persistent Config" Dilemma
+Open WebUI introduces a complexity regarding configuration persistence. It uses a hierarchy where settings saved in the GUI (stored in the internal SQLite database) override environment variables defined in the Docker stack.
+   * The Trap: Users often update an environment variable in Unraid/Portainer (e.g., changing the embedding batch size) and see no effect because a previous value is "locked" in the database.
+   * The Fix: Users must either update the setting via the Admin Panel or set ENABLE_PERSISTENT_CONFIG=False to force the application to respect the environment variables on every boot. This nuance is critical for troubleshooting configuration "drift".3
+5.3 Capabilities vs. Complexity
+Open WebUI offers:
+   * RBAC: Granular role-based access control, allowing admins to restrict which users can use RAG or specific models.
+   * Functions/Pipelines: A plugin system allowing users to write Python scripts to intercept and modify requests. This enables complex workflows, such as automatically fetching weather data or summarizing search results before they hit the LLM.
+   * Granular RAG Tuning: Users can adjust chunk size, overlap, and retrieval methods (Hybrid vs. Vector) directly in the UI settings.
+However, this flexibility comes with a steep learning curve. The sheer number of toggles and the potential conflict between GUI settings and Env Vars makes it a "power user" tool.
+________________
+6. Frontend Analysis: AnythingLLM
+AnythingLLM positions itself as a "full-stack application" or an all-in-one "Knowledge Base." Its design philosophy prioritizes the concept of the "Workspace" and ease of setup over granular pipeline introspection.
+6.1 Orchestration and Connectivity
+AnythingLLM connects to external services using a "Generic OpenAI" driver.
+   * vLLM Connection: Users configure the "Generic OpenAI" chat provider, inputting the base URL (http://<unraid-ip>:8880/v1).
+   * TEI Connection: Similarly, the embedding provider is set to "Generic OpenAI," pointing to the TEI Embed container (http://<unraid-ip>:8881/v1).
+Unlike Open WebUI, AnythingLLM often requires manual entry of model names if the auto-discovery handshake fails. It relies heavily on its internal state to map these connections.16
+6.2 The RAG Workflow: Abstraction over Control
+AnythingLLM manages the vector database interactions with a higher level of abstraction.
+   * Qdrant Support: It supports Qdrant as a backend, but it manages the collections opaquely. It handles document ingestion, chunking, and embedding as background processes tied to a workspace.
+   * Reranking Limitation: This is the critical weakness in the context of this specific stack. While AnythingLLM supports reranking, it is primarily designed around integrated providers (like Cohere). Support for a generic, local TEI reranking endpoint is not a "first-class" configuration option in the same way it is in Open WebUI. Users often have to rely on feature requests or complex workarounds to pipe retrieval through a local reranker, potentially missing out on the accuracy benefits of the TEI Rerank container deployed on port 8882.17
+6.3 User Experience: The Workspace Paradigm
+AnythingLLM excels in data organization.
+   * Workspaces: The ability to segregate documents into distinct workspaces (e.g., "Legal," "Technical," "Personal") is robust and intuitive.
+   * Citations: It provides excellent visual citations, allowing users to click a reference number and see the exact chunk of the source document used to generate the answer.
+   * Agents: AnythingLLM includes built-in "Agents" for web scraping and other tasks, which can be easier to deploy than Open WebUI's "Pipelines."
+6.4 Resource and Deployment Nuances
+AnythingLLM creates a "server" component and a "frontend" component. On Unraid, this is typically deployed as a single Docker image. However, its scraping and ingestion processes can be CPU-intensive. Since it abstracts the vector DB logic, troubleshooting issues (e.g., "why is this document not being found?") can be more difficult than in Open WebUI, where the pipeline is more transparent.
+________________
+7. Comparative Synthesis and Recommendation
+7.1 Feature Comparison Matrix
+Feature Domain
+	Open WebUI
+	AnythingLLM
+	Verdict for this Stack
+	Inference Connection
+	Auto-discovery via OpenAI API (vLLM)
+	Manual/Generic OpenAI API (vLLM)
+	Open WebUI (Smoother integration)
+	Embedding Engine
+	Native OpenAI-compatible (TEI)
+	Native OpenAI-compatible (TEI)
+	Tie
+	Reranking Support
+	Native External URL (TEI Rerank)
+	Limited/Provider-Specific
+	Open WebUI (Critical Advantage)
+	Vector DB (Qdrant)
+	Env Var Config; Hybrid Search
+	GUI Config; Abstracted Management
+	Open WebUI (Better Qdrant tuning)
+	Configuration
+	DevOps (Docker Env Vars)
+	User (GUI Settings)
+	Open WebUI (Better for Unraid Templates)
+	Multi-Tenancy
+	Strong RBAC & User Isolation
+	Workspace Permissions
+	Open WebUI (Better security model)
+	Document Mgmt
+	Document Collections
+	Workspace Silos
+	AnythingLLM (Better organization)
+	Ease of Use
+	Moderate (High configurability)
+	High ( "Just Works" philosophy)
+	AnythingLLM
+	7.2 The Verdict
+For the specific user intent—deploying a high-performance, external RAG stack with vLLM, TEI (Embed & Rerank), and Qdrant on Unraid—Open WebUI is the superior choice.
+Reasoning:
+   1. Pipeline Completeness: The user has gone to the effort of deploying a dedicated TEI Reranker. Open WebUI allows this component to be utilized immediately and natively via environment variables. AnythingLLM currently lacks a standardized way to integrate a local generic reranker, effectively rendering the port 8882 container useless in its default configuration.
+   2. Architectural Alignment: The Unraid/Docker ethos favors declarative configuration (Env Vars). Open WebUI fits this model, allowing the entire stack's topology to be defined in the Docker template. AnythingLLM requires stateful GUI configuration post-deployment.
+   3. Future Proofing: Open WebUI's "Pipeline" architecture allows for infinite extensibility (e.g., adding a distinct filter to sanitize inputs or logging queries to a separate system) without waiting for vendor updates.
+________________
+8. Definitive Implementation Blueprint
+The following section provides the exact technical specification to deploy this stack on Unraid, correcting the errors found in the user's logs and implementing the optimizations discussed.
+8.1 The Prep Script (User Script Plugin)
+Run this once to pre-download models. This avoids the pip errors and ensures models persist on the array.
+
+
+Bash
+
+
+
+
+#!/bin/bash
+# Unraid User Script: Download AI Models
+# Solves "pip not found" by using a Docker container for the download process.
+
+MODEL_DIR="/mnt/user/appdata/huggingface"
+mkdir -p "$MODEL_DIR"
+
+# Define Models
+LLM_MODEL="solidrust/Llama-3.1-8B-Lexi-Uncensored-V2-AWQ"
+EMBED_MODEL="Qwen/Qwen3-Embedding-0.6B"
+RERANK_MODEL="BAAI/bge-reranker-large"
+
+echo "Starting Download Container..."
+docker run --rm \
+ -v "$MODEL_DIR":/data \
+ python:3.11-slim \
+ bash -c "pip install huggingface_hub hf_transfer && \
+ export HF_HUB_ENABLE_HF_TRANSFER=1 && \
+ huggingface-cli download $LLM_MODEL --local-dir /data/llm/$(basename $LLM_MODEL) --local-dir-use-symlinks False && \
+ huggingface-cli download $EMBED_MODEL --local-dir /data/embed/$(basename $EMBED_MODEL) --local-dir-use-symlinks False && \
+ huggingface-cli download $RERANK_MODEL --local-dir /data/rerank/$(basename $RERANK_MODEL) --local-dir-use-symlinks False"
+
+echo "Download Complete. Permissions fixing..."
+chown -R 99:100 "$MODEL_DIR"
+
+8.2 The Docker Stack (Portainer / Compose)
+This YAML resolves the max_seq_len crash and configures Open WebUI to use the external reranker.
+
+
+YAML
+
+
+
+
+services:
+ # --- INFERENCE LAYER ---
+ vllm:
+   image: vllm/vllm-openai:v0.15.1
+   container_name: vllm-inference
+   runtime: nvidia
+   deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: 1
+             capabilities: [gpu]
+   environment:
+     - VLLM_USE_V1=1  # Enable V1 engine (try 0 if stability issues arise)
+   volumes:
+     - /mnt/user/appdata/huggingface/llm/Llama-3.1-8B-Lexi-Uncensored-V2-AWQ:/model:ro
+   command: >
+     --model /model
+     --served-model-name Llama-3.1-8B
+     --quantization awq
+     --dtype half
+     --max-model-len 8192             # CRITICAL: Fixes OOM crash on 12GB Card
+     --gpu-memory-utilization 0.75    # CRITICAL: Reserves VRAM for TEI
+     --port 8000
+    ports:
+     - "8880:8000"
+   restart: unless-stopped
+
+ # --- SEMANTIC LAYER (EMBED) ---
+ tei-embed:
+   image: ghcr.io/huggingface/text-embeddings-inference:89-1.8
+   container_name: tei-embed
+   runtime: nvidia
+   deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: 1
+             capabilities: [gpu]
+   volumes:
+     - /mnt/user/appdata/huggingface/embed/Qwen3-Embedding-0.6B:/model:ro
+   command: ["--model-id", "/model", "--port", "80", "--auto-truncate"]
+   ports:
+     - "8881:80"
+   restart: unless-stopped
+
+ # --- SEMANTIC LAYER (RERANK) ---
+ tei-rerank:
+   image: ghcr.io/huggingface/text-embeddings-inference:89-1.8
+   container_name: tei-rerank
+   runtime: nvidia
+   deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: 1
+             capabilities: [gpu]
+   volumes:
+     - /mnt/user/appdata/huggingface/rerank/bge-reranker-large:/model:ro
+   command: ["--model-id", "/model", "--port", "80", "--auto-truncate"]
+   ports:
+     - "8882:80"
+   restart: unless-stopped
+
+ # --- STORAGE LAYER ---
+ qdrant:
+   image: qdrant/qdrant:latest
+   container_name: qdrant
+   volumes:
+     - /mnt/user/appdata/qdrant:/qdrant/storage
+   ports:
+     - "6333:6333"
+   restart: unless-stopped
+
+ # --- ORCHESTRATION LAYER ---
+ open-webui:
+   image: ghcr.io/open-webui/open-webui:main
+   container_name: open-webui
+   environment:
+     # Connection to vLLM
+     - OPENAI_API_BASE_URL=http://vllm-inference:8000/v1
+     - OPENAI_API_KEY=sk-dummy
+     # Embedding Configuration (Offloading to TEI)
+     - RAG_EMBEDDING_ENGINE=openai
+     - RAG_OPENAI_API_BASE_URL=http://tei-embed:80/v1
+     - RAG_OPENAI_API_KEY=sk-dummy
+     # Reranking Configuration (The Key Integration)
+     - RAG_RERANKING_MODEL=BAAI/bge-reranker-large
+     - RAG_EXTERNAL_RERANKER_URL=http://tei-rerank:80/v1/rerank
+     - RAG_EXTERNAL_RERANKER_API_KEY=sk-dummy
+     # Vector DB
+     - VECTOR_DB=qdrant
+     - QDRANT_URI=http://qdrant:6333
+     # Persistence safety
+     - ENABLE_PERSISTENT_CONFIG=True
+   ports:
+     - "3000:8080"
+   volumes:
+     - /mnt/user/appdata/open-webui:/app/backend/data
+   restart: unless-stopped
+   depends_on:
+     - vllm
+     - tei-embed
+     - tei-rerank
+     - qdrant
+
+8.3 Post-Deployment Validation
+   1. Monitor VRAM: Use nvidia-smi on the Unraid host. Ensure that vllm is taking ~9-10GB and the two tei containers are taking ~0.5-1.0GB each. If tei fails to start, lower gpu-memory-utilization in the vLLM command to 0.70.
+   2. Verify Reranking: In Open WebUI, perform a search on a document. Check the logs of the tei-rerank container (docker logs tei-rerank). You should see POST /rerank requests with status 200, confirming that the pipeline is active and effectively filtering results.
+By adhering to this blueprint, the user will achieve a stable, high-performance local AI system that fully utilizes the RTX 4070 without succumbing to the resource contention issues characteristic of monolithic deployments.
+Works cited
+   1. Untitled document (8).txt
+   2. How to Deploy Llama 3.1 8B on NVIDIA GPU with vLLM: Complete Optimization Guide, accessed February 6, 2026, https://simplismart.ai/blog/deploy-llama-3-1-8b-using-vllm
+   3. Environment Variable Configuration - Open WebUI, accessed February 6, 2026, https://docs.openwebui.com/getting-started/env-configuration/
+   4. How do i use qdrant in OpenWebUI - Reddit, accessed February 6, 2026, https://www.reddit.com/r/OpenWebUI/comments/1k57el7/how_do_i_use_qdrant_in_openwebui/
+   5. What is Agentic RAG? Building Agents with Qdrant, accessed February 6, 2026, https://qdrant.tech/articles/agentic-rag/
+   6. hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4 - Hugging Face, accessed February 6, 2026, https://huggingface.co/hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4
+   7. Troubleshooting - vLLM, accessed February 6, 2026, https://docs.vllm.ai/en/latest/usage/troubleshooting/
+   8. [Bug]: ZeroDivisionError: float floor division by zero · Issue #32568 · vllm-project/vllm, accessed February 6, 2026, https://github.com/vllm-project/vllm/issues/32568
+   9. [Usage]: Engine in background thread · Issue #19326 · vllm-project/vllm - GitHub, accessed February 6, 2026, https://github.com/vllm-project/vllm/issues/19326
+   10. vLLM V1 User Guide, accessed February 6, 2026, https://docs.vllm.ai/en/v0.8.1/getting_started/v1_user_guide.html
+   11. [Usage]: What's the minimum VRAM needed to use entire context length for Llama 3.1 70B and 405B · Issue #8188 · vllm-project/vllm - GitHub, accessed February 6, 2026, https://github.com/vllm-project/vllm/issues/8188
+   12. Text Embeddings Inference - Hugging Face, accessed February 6, 2026, https://huggingface.co/docs/text-embeddings-inference/en/index
+   13. Qdrant, Postgres, and Open Web UI - Some Cliff Notes From Day 1 #11597 - GitHub, accessed February 6, 2026, https://github.com/open-webui/open-webui/discussions/11597
+   14. Starting with OpenAI-Compatible Servers - Open WebUI, accessed February 6, 2026, https://docs.openwebui.com/getting-started/quick-start/starting-with-openai-compatible/
+   15. How I Self-Hosted a Local Reranker for Open WebUI with vLLM (No More Jina API) - Reddit, accessed February 6, 2026, https://www.reddit.com/r/OpenWebUI/comments/1pk3sni/how_i_selfhosted_a_local_reranker_for_open_webui/
+   16. OpenAI (Generic) LLM - AnythingLLM Docs, accessed February 6, 2026, https://docs.anythingllm.com/setup/llm-configuration/cloud/openai-generic
+   17. [FEAT]: Support for locally deployed reranker models via Ollama (e.g., Qwen3 Reranker) · Issue #4012 · Mintplex-Labs/anything-llm - GitHub, accessed February 6, 2026, https://github.com/Mintplex-Labs/anything-llm/issues/4012
+   18. [FEAT]: Allow Free Selection of Reranking Models to Improve Support for Non-English Languages · Issue #3942 · Mintplex-Labs/anything-llm - GitHub, accessed February 6, 2026, https://github.com/Mintplex-Labs/anything-llm/issues/3942
