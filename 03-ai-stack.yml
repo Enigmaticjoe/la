@@ -24,7 +24,8 @@ services:
   # 💎 Qdrant - Vector Database
   # ──────────────────────────────────────────────────────────
   qdrant:
-    image: qdrant/qdrant:v1.13.2
+    image: qdrant/qdrant:latest
+
     container_name: qdrant
     restart: unless-stopped
     environment:
@@ -50,7 +51,8 @@ services:
   # ⚡ vLLM - Primary Inference Engine (80% VRAM)
   # ──────────────────────────────────────────────────────────
   vllm:
-    image: vllm/vllm-openai:v0.6.5
+    image: vllm/vllm-openai:v0.15.1
+
     container_name: vllm
     restart: unless-stopped
     environment:
@@ -103,7 +105,8 @@ services:
   # 📐 TEI Embeddings (~1.5GB VRAM)
   # ──────────────────────────────────────────────────────────
   embeddings:
-    image: ghcr.io/huggingface/text-embeddings-inference:1.5
+    image: ghcr.io/huggingface/text-embeddings-inference:89-1.8
+
     container_name: embeddings
     restart: unless-stopped
     volumes:

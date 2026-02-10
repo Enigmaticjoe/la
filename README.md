@@ -1,5 +1,19 @@
 # BRAWN - Complete Portainer Stack Package
-## 192.168.1.222:8008 | Unraid 7.2.3 | Project Chimera NODE A
+## 192.168.1.222:8008 | Unraid 7.2.3 | Project Chimera - Auxiliary Node
+
+> **Brain-Brawn Ecosystem**: Brawn handles media/storage and auxiliary AI services while Brain (192.168.1.9) runs primary AI workloads. See [BRAIN-BRAWN-INTEGRATION.md](BRAIN-BRAWN-INTEGRATION.md) for the complete integration guide.
+
+---
+
+## Quick Deploy
+
+```bash
+# 1. Sync stack files with your current Unraid images
+bash scripts/automation/sync-stack-images.sh --from-unraid 192.168.1.222
+
+# 2. Follow the interactive deployment guide
+bash scripts/automation/deploy-updated-stacks.sh
+```
 
 ---
 
@@ -9,12 +23,15 @@
 |------|---------|
 | `01-core-infrastructure.yml` | Homepage, Uptime Kuma, Dozzle, Node-RED, MQTT, Glances, Watchtower, Cloudflared, SearXNG, FlareSolverr, Browserless, hass-unraid |
 | `02-media-stack.yml` | Zurg, rclone, Plex, Jellyfin, Sonarr, Radarr, Lidarr, Prowlarr, Bazarr, Overseerr, Tautulli, RDT-Client, Gluetun + qBittorrent |
-| `03-ai-stack.yml` | Ollama, OpenWebUI, vLLM, TEI Embeddings, Qdrant, AnythingLLM, n8n, Whisper, Piper |
+| `03-ai-stack.yml` | vLLM, OpenWebUI, TEI Embeddings, Qdrant, AnythingLLM, n8n, Whisper, Piper (connects to Brain vLLM) |
 | `04-storage-stack.yml` | Nextcloud + MariaDB + Redis |
 | `brawn-stacks.env` | All secrets/API keys (edit before deploying) |
 | `brawn-setup.sh` | Create dirs, permissions, default configs, validate |
 | `brawn-validate.sh` | Post-deploy health check for all services |
 | `brawn-maintenance.sh` | Cleanup orphans, check health, disk report |
+| `scripts/automation/sync-stack-images.sh` | Sync stack files with current running images |
+| `scripts/automation/deploy-updated-stacks.sh` | Interactive deployment guide for updated stacks |
+| **`BRAIN-BRAWN-INTEGRATION.md`** | **Complete guide for Brain-Brawn ecosystem integration** |
 
 ---
 
@@ -96,6 +113,24 @@ bash brawn-validate.sh
 
 ---
 
+## Brain-Brawn Ecosystem
+
+Brawn (this Unraid server) works as part of a distributed AI ecosystem:
+
+- **Brain (192.168.1.9)**: Primary AI workloads, model training, heavy inference
+- **Brawn (192.168.1.222)**: Media management, storage, auxiliary AI, monitoring
+
+### Key Integrations
+
+- **Dual vLLM Setup**: OpenWebUI on Brawn connects to both Brain and Brawn vLLM instances
+- **Shared Storage**: Brawn provides network storage accessible from Brain
+- **Unified Monitoring**: Homepage and Uptime Kuma on Brawn monitor both systems
+- **Load Balancing**: AI requests automatically distributed between systems
+
+See **[BRAIN-BRAWN-INTEGRATION.md](BRAIN-BRAWN-INTEGRATION.md)** for complete setup guide.
+
+---
+
 ## Maintenance
 
 ```bash
@@ -107,4 +142,7 @@ bash /mnt/user/appdata/brawn-stacks/brawn-maintenance.sh --dry-run
 
 # Full validation
 bash /mnt/user/appdata/brawn-stacks/brawn-validate.sh
+
+# Update stack images from running containers
+bash /mnt/user/appdata/brawn-stacks/scripts/automation/sync-stack-images.sh --from-unraid 192.168.1.222
 ```
