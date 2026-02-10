@@ -21,16 +21,16 @@ docker ps --filter name=brain- --format "table {{.Names}}\t{{.Status}}"
 | **Qdrant** | 20 seconds | Database initialization |
 | **SearXNG** | 15 seconds | Config loading |
 | **vLLM** | 4 minutes | Model loading to GPU (16-18GB) |
-| **Embeddings** | 5 minutes | Model download (~1.2GB) + loading |
+| **Embeddings** | 10 minutes | Model download (~1.2GB) + loading |
 | **OpenWebUI** | 1 minute | Waits for all dependencies |
 
-⚠️ **Total first-time deployment**: 5-10 minutes (includes model downloads)
+⚠️ **Total first-time deployment**: 10-15 minutes (includes model downloads)
 
 ## Common Issues & Quick Fixes
 
 ### 1. "brain-embeddings is unhealthy"
 
-**Status during startup** (first 5 min): `(health: starting)`  
+**Status during startup** (first 10 min): `(health: starting)`  
 **This is NORMAL** - model is downloading
 
 **Check progress**:
@@ -52,7 +52,7 @@ sudo chown -R $USER:$USER /home/brains/embeddings-cache
 # Restart the container
 docker restart brain-embeddings
 
-# Wait 5 minutes and check again
+# Wait 10 minutes and check again
 docker ps | grep brain-embeddings
 ```
 
@@ -255,5 +255,5 @@ docker system df
 
 ---
 
-**Remember**: First deployment takes 5-10 minutes due to model downloads.  
+**Remember**: First deployment takes 10-15 minutes due to model downloads.  
 **Be patient** and watch the logs! 🚀
