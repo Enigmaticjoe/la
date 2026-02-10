@@ -186,11 +186,11 @@ After clicking deploy:
 2. Containers will start in dependency order:
    - **Qdrant** starts first (~30 seconds)
    - **vLLM** starts next (2-3 minutes to load model to GPU)
-   - **TEI Embeddings** starts (3-5 minutes first time due to model download)
+   - **TEI Embeddings** starts (5-10 minutes first time due to model download)
    - **SearXNG** starts (~15 seconds)
    - **OpenWebUI** starts last (waits for all dependencies)
 
-**Total startup time**: 5-10 minutes on first deployment (model downloads)
+**Total startup time**: 10-15 minutes on first deployment (model downloads)
 
 ## 🔍 Verifying Deployment
 
@@ -203,7 +203,7 @@ In Portainer:
 
 **If any container shows "unhealthy"**, wait the full startup period:
 - **vLLM**: up to 4 minutes (240s start_period)
-- **TEI Embeddings**: up to 5 minutes (300s start_period)
+- **TEI Embeddings**: up to 10 minutes (600s start_period)
 - **Qdrant**: up to 30 seconds
 - **SearXNG**: up to 15 seconds
 - **OpenWebUI**: up to 1 minute (waits for dependencies)
@@ -265,8 +265,8 @@ Open in your browser:
 **Solution**:
 1. Check logs in Portainer: **Containers** → **brain-embeddings** → **Logs**
 2. Look for: "Downloading model Qwen/Qwen3-Embedding-0.6B"
-3. Wait up to 5 minutes for model download to complete
-4. If still failing after 5 minutes, check:
+3. Wait up to 10 minutes for model download to complete
+4. If still failing after 10 minutes, check:
    ```bash
    # Check if directory is writable
    ls -la /home/brains/embeddings-cache

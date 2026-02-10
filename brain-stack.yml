@@ -32,7 +32,7 @@
 #
 # HEALTHCHECK TIMINGS:
 #   - vLLM: 240s start period (model loading to GPU)
-#   - TEI Embeddings: 300s start period (model download ~1.2GB + loading)
+#   - TEI Embeddings: 600s start period (model download ~1.2GB + loading)
 #   - Qdrant: 20s start period (quick database init)
 #   - SearXNG: 15s start period (lightweight service)
 #   - OpenWebUI: 60s start period (depends on other services)
@@ -221,11 +221,11 @@ services:
       brain_net:
         ipv4_address: 172.31.0.20
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:80/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 300s
+      retries: 10
+      start_period: 600s
 
   # ---------------------------------------------------------------
   # SearXNG - Privacy-Respecting Metasearch
