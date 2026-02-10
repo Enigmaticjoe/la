@@ -2,8 +2,15 @@
 # brain-stack.yml
 # NODE B (Brain) - Pop!_OS | Ultra 9 285K | RX 7900 XT 20GB | 128GB DDR5
 #
-# Deploy: docker compose -f brain-stack.yml up -d
-# Clean:  bash brain-setup.sh   (run first to create dirs + cleanup)
+# Deploy via Docker Compose: docker compose -f brain-stack.yml up -d
+# Deploy via Portainer: See PORTAINER-DEPLOY.md for detailed instructions
+# Setup (REQUIRED before deployment): bash brain-setup.sh
+#
+# IMPORTANT: Run brain-setup.sh BEFORE deploying this stack to:
+#   - Create required directories (/home/brains/*)
+#   - Generate SearXNG configuration
+#   - Validate system prerequisites
+#   - Clean up old containers/networks
 #
 # GPU BUDGET (RX 7900 XT 20GB via ROCm):
 #   vLLM:       ~18GB (90%) -- large quantized models up to 70B Q4
@@ -22,6 +29,13 @@
 #   8001  - TEI Embeddings API
 #   8888  - SearXNG search
 #   3000  - OpenWebUI (Brain-local)
+#
+# HEALTHCHECK TIMINGS:
+#   - vLLM: 240s start period (model loading to GPU)
+#   - TEI Embeddings: 300s start period (model download ~1.2GB + loading)
+#   - Qdrant: 20s start period (quick database init)
+#   - SearXNG: 15s start period (lightweight service)
+#   - OpenWebUI: 60s start period (depends on other services)
 ###############################################################################
 
 networks:
@@ -186,6 +200,7 @@ services:
   # Runs on CPU to keep full GPU for vLLM
   # Ultra 9 285K + 128GB RAM handles 0.6B model easily
   # Model auto-downloads on first start (~1.2GB)
+  # Extended start_period to allow for model download (3-5 min)
   # ---------------------------------------------------------------
   embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
@@ -210,7 +225,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 120s
+      start_period: 300s
 
   # ---------------------------------------------------------------
   # SearXNG - Privacy-Respecting Metasearch
@@ -275,8 +290,8 @@ services:
       embeddings:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
