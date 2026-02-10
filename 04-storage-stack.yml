@@ -19,7 +19,8 @@ services:
   # 🗄️ MariaDB - Database for Nextcloud
   # ──────────────────────────────────────────────────────────
   nextcloud-db:
-    image: mariadb:11
+    image: mariadb:latest
+
     container_name: nextcloud-db
     restart: unless-stopped
     environment:
@@ -50,7 +51,8 @@ services:
   # ⚡ Redis - Cache for Nextcloud
   # ──────────────────────────────────────────────────────────
   nextcloud-redis:
-    image: redis:7-alpine
+    image: redis:alpine
+
     container_name: nextcloud-redis
     restart: unless-stopped
     command: redis-server --save 60 1 --loglevel warning --requirepass ${NC_REDIS_PASS:-changeme-redis}
@@ -69,7 +71,8 @@ services:
   # ☁️ Nextcloud - Self-Hosted Cloud
   # ──────────────────────────────────────────────────────────
   nextcloud:
-    image: nextcloud:30-apache
+    image: nextcloud:latest
+
     container_name: nextcloud
     restart: unless-stopped
     environment:

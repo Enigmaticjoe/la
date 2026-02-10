@@ -32,7 +32,8 @@ services:
   # Swap models by changing --model and restarting
   # ──────────────────────────────────────────────────────────
   vllm:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.15.1
+
     container_name: brain-vllm
     restart: unless-stopped
     environment:

@@ -389,7 +389,8 @@ services:
   # 🎯 Overseerr - Request Manager
   # ──────────────────────────────────────────────────────────
   overseerr:
-    image: sctx/overseerr:latest
+    image: sctx/overseerr:develop
+
     container_name: overseerr
     restart: unless-stopped
     environment:

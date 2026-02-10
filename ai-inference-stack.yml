@@ -30,7 +30,8 @@ services:
   # OpenAI-compatible API at http://UNRAID_IP:8880/v1
   # ============================================================================
   vllm:
-    image: vllm/vllm-openai:v0.8.5
+    image: vllm/vllm-openai:v0.15.1
+
     container_name: vllm
     runtime: nvidia
     restart: unless-stopped
@@ -90,7 +91,8 @@ services:
   # Embedding API at http://UNRAID_IP:8881
   # ============================================================================
   tei-embed:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    image: ghcr.io/huggingface/text-embeddings-inference:89-1.8
+
     container_name: tei-embed
     restart: unless-stopped
     ports:
@@ -124,7 +126,8 @@ services:
   # Reranker API at http://UNRAID_IP:8882
   # ============================================================================
   tei-rerank:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    image: ghcr.io/huggingface/text-embeddings-inference:89-1.8
+
     container_name: tei-rerank
     restart: unless-stopped
     ports:
@@ -155,7 +158,8 @@ services:
   # gRPC at http://UNRAID_IP:6334
   # ============================================================================
   qdrant:
-    image: qdrant/qdrant:v1.14.0
+    image: qdrant/qdrant:latest
+
     container_name: qdrant
     restart: unless-stopped
     ports:
