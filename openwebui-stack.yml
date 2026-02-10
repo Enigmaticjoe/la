@@ -1,0 +1,250 @@
+## ---------------------------------------------------------------------------
+## OpenAI‑Compatible AI Stack for Unraid
+##
+## This compose file builds upon your existing inference stack by adding
+## Open WebUI as the user‑facing interface. It leverages a single NVIDIA GPU
+## to serve a quantised LLM via vLLM and performs embeddings and reranking
+## using HuggingFace's Text‑Embeddings‑Inference. The configuration has
+## been tuned specifically for Unraid/Portainer deployments on a 12 GB
+## RTX 4070 to maximise context without overrunning VRAM. The Open WebUI
+## container is pre‑configured to talk to each service so that you can log
+## in and start chatting immediately.
+##
+## Usage:
+##   1. Run the model download script before deploying (see guidebook).
+##   2. In Portainer go to Stacks → Add stack and paste this YAML.
+##   3. Deploy the stack. vLLM may take a minute or two to warm up.
+##
+## Notes:
+##   * All containers run under the `ai_grid` bridge network so they can
+##     resolve each other by name (e.g. `vllm`, `tei-embed`).
+##   * Unraid’s UID/GID 99:100 are used implicitly inside model download
+##     scripts – you do not need to change anything here.
+##   * Replace `WEBUI_SECRET_KEY` with your own random string on first use.
+##   * Set `ENABLE_PERSISTENT_CONFIG` to `false` to force environment
+##     variables to apply on every restart. You can later flip this in
+##     the WebUI if you’d like the settings saved in the database instead.
+version: "3.8"
+
+networks:
+  ai_grid:
+    driver: bridge
+
+services:
+  ## -------------------------------------------------------------------------
+  ## vLLM – Large Language Model inference server
+  ##
+  ## Dolphin 3.0 (uncensored, Llama 3.1 base, 8 billion parameters) is used
+  ## here as the default model. It provides a good balance of reasoning
+  ## quality and VRAM usage (~5.5 GB in 4‑bit AWQ). Should you wish to
+  ## experiment with other models (e.g. Qwen3‑4B FP8), change the
+  ## `--model` parameter and update the download script accordingly.
+  ## -------------------------------------------------------------------------
+  vllm:
+    image: vllm/vllm-openai:v0.8.5
+    container_name: vllm
+    runtime: nvidia
+    restart: unless-stopped
+    ports:
+      - "8880:8000"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - VLLM_USE_V1=0                # use stable engine path on low‑VRAM cards
+      - HF_HUB_OFFLINE=1
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+    volumes:
+      - /mnt/user/appdata/huggingface/vllm-models:/models:ro
+      - /mnt/user/appdata/huggingface/hub:/root/.cache/huggingface:ro
+    command:
+      - --model
+      - /models/solidrust/dolphin-3.0-llama3.1-8b-AWQ
+      - --quantization
+      - awq_marlin
+      - --dtype
+      - half
+      - --gpu-memory-utilization
+      - "0.65"                      # cap VRAM usage (~7.8 GB on 12 GB card)
+      - --max-model-len
+      - "16384"                     # 16 k context window for RAG
+      - --max-num-seqs
+      - "8"
+      - --enable-prefix-caching
+      - --served-model-name
+      - dolphin-3.0
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+    shm_size: "4gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  ## -------------------------------------------------------------------------
+  ## TEI Embeddings – Text Embeddings Inference (CPU)
+  ##
+  ## Provides an OpenAI‑compatible /v1/embeddings endpoint used by Open WebUI.
+  ## -------------------------------------------------------------------------
+  tei-embed:
+    # Use the latest Text‑Embeddings‑Inference build (v1.8+) which adds
+    # support for Qwen3 embedding models. The CPU variant is built into
+    # the default tag, so there is no separate `cpu-*` suffix.
+    image: ghcr.io/huggingface/text-embeddings-inference:1.8
+    container_name: tei-embed
+    restart: unless-stopped
+    ports:
+      - "8881:80"
+    volumes:
+      - /mnt/user/appdata/huggingface/tei-embed-data:/data:ro
+    command:
+      - --model-id
+      - /data/Qwen/Qwen3-Embedding-0.6B
+      - --port
+      - "80"
+      - --max-client-batch-size
+      - "32"
+      - --max-batch-tokens
+      - "16384"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  ## -------------------------------------------------------------------------
+  ## TEI Reranker – Cross‑Encoder for RAG reranking (CPU)
+  ##
+  ## Exposes /rerank endpoint for cross‑encoder scoring. The Open WebUI
+  ## configuration below points its external reranker to this container.
+  ## -------------------------------------------------------------------------
+  tei-rerank:
+    # Use the same 1.8 tag for the reranker. Although the reranker is a
+    # sequence‑classification model, the 1.8 release adds support for Qwen3
+    # positions and improved performance. It runs entirely on CPU.
+    image: ghcr.io/huggingface/text-embeddings-inference:1.8
+    container_name: tei-rerank
+    restart: unless-stopped
+    ports:
+      - "8882:80"
+    volumes:
+      - /mnt/user/appdata/huggingface/tei-rerank-data:/data:ro
+    command:
+      - --model-id
+      - /data/BAAI/bge-reranker-large
+      - --port
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  ## -------------------------------------------------------------------------
+  ## Qdrant – Vector database used by Open WebUI’s RAG pipeline
+  ## -------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:v1.14.0
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"    # HTTP API
+      - "6334:6334"    # gRPC API
+    volumes:
+      - /mnt/user/appdata/qdrant/storage:/qdrant/storage
+      - /mnt/user/appdata/qdrant/snapshots:/qdrant/snapshots
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD_KB=20480
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  ## -------------------------------------------------------------------------
+  ## Open WebUI – User interface for LLMs with RAG, knowledge and tools
+  ##
+  ## This container connects to your vLLM server (OpenAI API), TEI embedder
+  ## and reranker. By setting `ENABLE_PERSISTENT_CONFIG=false` the initial
+  ## environment variables are reapplied on restart. After first boot you can
+  ## enable persistent config from within the Admin panel if desired.
+  ## -------------------------------------------------------------------------
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    depends_on:
+      vllm:
+        condition: service_healthy
+      tei-embed:
+        condition: service_healthy
+      tei-rerank:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "3000:8080"
+    volumes:
+      - /mnt/user/appdata/open-webui/data:/app/backend/data
+    environment:
+      # Security key for encrypting tokens (change this on your deployment)
+      - WEBUI_SECRET_KEY=change-me-please
+      # Disable sign‑up and use single user mode (set to False to enable auth)
+      - WEBUI_AUTH=False
+      # Persist settings in DB or always read from env
+      - ENABLE_PERSISTENT_CONFIG=false
+      # Enable OpenAI API and point to your vLLM server
+      - ENABLE_OPENAI_API=true
+      - OPENAI_API_BASE_URL=http://vllm:8000/v1
+      - OPENAI_API_KEY=
+      # Configure RAG to use local embedding and reranking services
+      - RAG_OPENAI_API_BASE_URL=http://tei-embed:80/v1
+      - RAG_OPENAI_API_KEY=
+      - RAG_EXTERNAL_RERANKER_URL=http://tei-rerank:80/rerank
+      - RAG_EXTERNAL_RERANKER_API_KEY=
+      # Point RAG to the Qdrant vector DB
+      - QDRANT_URL=http://qdrant:6333
+      # Enable built‑in web search with a default provider (optional)
+      - ENABLE_WEB_SEARCH=true
+      - SEARCH_PROVIDER=searx
+      # Cache generated queries to avoid duplicate LLM calls when both
+      # web search and RAG are active. This cuts latency and token
+      # usage and is recommended for larger setups【212468990885291†L3399-L3408】.
+      - ENABLE_QUERIES_CACHE=true
+      # Miscellaneous performance tweaks
+      - AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST=30
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"

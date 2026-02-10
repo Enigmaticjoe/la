@@ -1,0 +1,295 @@
+###############################################################################
+# 03-ai-stack.yml (FINAL - vLLM Only, No Ollama)
+# BRAWN (192.168.1.222) - AI Orchestration Stack
+# Deploy via: Portainer (192.168.1.222:8008) → Stacks → Add Stack
+#
+# GPU BUDGET (RTX 4070 12GB):
+#   vLLM:       ~9.6GB (80%) — Qwen2.5-7B-Instruct-AWQ
+#   Embeddings: ~1.5GB — Qwen3-Embedding-0.6B float16
+#   Plex HW:    Shared NVENC/NVDEC (separate silicon)
+#   Headroom:   ~0.9GB
+#
+# Network: ai_net (172.25.0.0/16)
+###############################################################################
+
+networks:
+  ai_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+services:
+  # ──────────────────────────────────────────────────────────
+  # 💎 Qdrant - Vector Database
+  # ──────────────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: qdrant
+    restart: unless-stopped
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    volumes:
+      - /mnt/qdrant/storage:/qdrant/storage
+      - /mnt/qdrant/snapshots:/qdrant/snapshots
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    networks:
+      ai_net:
+        ipv4_address: 172.25.0.10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ──────────────────────────────────────────────────────────
+  # ⚡ vLLM - Primary Inference Engine (80% VRAM)
+  # ──────────────────────────────────────────────────────────
+  vllm:
+    image: vllm/vllm-openai:v0.6.5
+    container_name: vllm
+    restart: unless-stopped
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - HF_HOME=/root/.cache/huggingface
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+    volumes:
+      - /mnt/user/appdata/ai-models:/root/.cache/huggingface
+      - /mnt/user/appdata/huggingface/models:/models:ro
+    ports:
+      - "8002:8000"
+    command:
+      - --model
+      - /models/Qwen/Qwen2.5-7B-Instruct-AWQ
+      - --quantization
+      - awq
+      - --dtype
+      - half
+      - --gpu-memory-utilization
+      - "0.80"
+      - --max-model-len
+      - "8192"
+      - --max-num-seqs
+      - "8"
+      - --port
+      - "8000"
+      - --host
+      - "0.0.0.0"
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - hermes
+    networks:
+      ai_net:
+        ipv4_address: 172.25.0.20
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+  # ──────────────────────────────────────────────────────────
+  # 📐 TEI Embeddings (~1.5GB VRAM)
+  # ──────────────────────────────────────────────────────────
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:1.5
+    container_name: embeddings
+    restart: unless-stopped
+    volumes:
+      - /mnt/user/appdata/huggingface/models:/data:ro
+    ports:
+      - "8001:80"
+    command:
+      - --model-id
+      - /data/Qwen/Qwen3-Embedding-0.6B
+      - --port
+      - "80"
+      - --max-batch-tokens
+      - "16384"
+      - --dtype
+      - float16
+    networks:
+      ai_net:
+        ipv4_address: 172.25.0.30
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ──────────────────────────────────────────────────────────
+  # 💬 OpenWebUI - Chat Interface
+  # Connects to: Brawn vLLM (local) + Brain vLLM (remote)
+  # ──────────────────────────────────────────────────────────
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    restart: unless-stopped
+    environment:
+      - OPENAI_API_BASE_URLS=http://172.25.0.20:8000/v1;http://${BRAIN_IP:-192.168.1.9}:8000/v1
+      - OPENAI_API_KEYS=sk-brawn-local;sk-brain-remote
+      - WEBUI_AUTH=true
+      - WEBUI_NAME=Chimera AI
+      - ENABLE_RAG_WEB_SEARCH=true
+      - RAG_WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://192.168.1.222:8888/search?q=<query>
+      - ENABLE_RAG_HYBRID_SEARCH=true
+      - RAG_EMBEDDING_ENGINE=openai
+      - RAG_OPENAI_API_BASE_URL=http://172.25.0.30:80/v1
+      - RAG_OPENAI_API_KEY=sk-local
+    volumes:
+      - /mnt/user/appdata/openwebui:/app/backend/data
+    ports:
+      - "3000:8080"
+    networks:
+      ai_net:
+        ipv4_address: 172.25.0.35
+    depends_on:
+      vllm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # 📚 AnythingLLM - RAG Document Q&A
+  # ──────────────────────────────────────────────────────────
+  anythingllm:
+    image: mintplexlabs/anythingllm:latest
+    container_name: anythingllm
+    restart: unless-stopped
+    environment:
+      - STORAGE_DIR=/app/server/storage
+      - LLM_PROVIDER=generic-openai
+      - GENERIC_OPEN_AI_BASE_PATH=http://172.25.0.20:8000/v1
+      - GENERIC_OPEN_AI_MODEL_PREF=Qwen/Qwen2.5-7B-Instruct-AWQ
+      - GENERIC_OPEN_AI_MODEL_TOKEN_LIMIT=8192
+      - EMBEDDING_ENGINE=generic-openai
+      - EMBEDDING_BASE_PATH=http://172.25.0.30:80
+      - EMBEDDING_MODEL_PREF=Qwen/Qwen3-Embedding-0.6B
+      - VECTOR_DB=qdrant
+      - QDRANT_ENDPOINT=http://172.25.0.10:6333
+      - AUTH_TOKEN=${ANYTHINGLLM_AUTH_TOKEN:-changeme-auth-token}
+      - JWT_SECRET=${ANYTHINGLLM_JWT_SECRET:-changeme-jwt-secret}
+    volumes:
+      - /mnt/user/appdata/anythingllm:/app/server/storage
+      - /mnt/user/appdata/anythingllm/hotdir:/app/collector/hotdir
+    ports:
+      - "3002:3001"
+    networks:
+      ai_net:
+        ipv4_address: 172.25.0.40
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # ⚙️ n8n - Workflow Automation
+  # ──────────────────────────────────────────────────────────
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+      - GENERIC_TIMEZONE=America/New_York
+      - N8N_HOST=192.168.1.222
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://192.168.1.222:5678/
+      - N8N_DIAGNOSTICS_ENABLED=false
+    volumes:
+      - /mnt/user/appdata/n8n:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    networks:
+      ai_net:
+        ipv4_address: 172.25.0.50
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # 🎤 Whisper - Speech-to-Text (Wyoming)
+  # ──────────────────────────────────────────────────────────
+  whisper:
+    image: rhasspy/wyoming-whisper:latest
+    container_name: whisper
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+    command:
+      - --model
+      - small-int8
+      - --language
+      - en
+      - --beam-size
+      - "1"
+      - --uri
+      - tcp://0.0.0.0:10300
+    volumes:
+      - /mnt/user/appdata/whisper:/data
+    ports:
+      - "10300:10300"
+    networks:
+      ai_net:
+        ipv4_address: 172.25.0.60
+
+  # ──────────────────────────────────────────────────────────
+  # 🔊 Piper - Text-to-Speech (Wyoming)
+  # ──────────────────────────────────────────────────────────
+  piper:
+    image: rhasspy/wyoming-piper:latest
+    container_name: piper
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+    command:
+      - --voice
+      - en_US-lessac-medium
+      - --uri
+      - tcp://0.0.0.0:10200
+      - --length-scale
+      - "1.0"
+      - --noise-scale
+      - "0.667"
+      - --noise-w
+      - "0.333"
+    volumes:
+      - /mnt/user/appdata/piper:/data
+    ports:
+      - "10200:10200"
+    networks:
+      ai_net:
+        ipv4_address: 172.25.0.61

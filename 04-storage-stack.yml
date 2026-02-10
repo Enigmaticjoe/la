@@ -1,0 +1,98 @@
+###############################################################################
+# 04-storage-stack.yml
+# BRAWN (192.168.1.222) - Storage & Productivity
+# Deploy via: Portainer (192.168.1.222:8008) → Stacks → Add Stack
+#
+# Services: Nextcloud, MariaDB, Redis
+# Network: storage_net (172.24.0.0/16)
+###############################################################################
+
+networks:
+  storage_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.24.0.0/16
+
+services:
+  # ──────────────────────────────────────────────────────────
+  # 🗄️ MariaDB - Database for Nextcloud
+  # ──────────────────────────────────────────────────────────
+  nextcloud-db:
+    image: mariadb:11
+    container_name: nextcloud-db
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+      - MYSQL_ROOT_PASSWORD=${NC_DB_ROOT_PASS:-changeme-root}
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=${NC_DB_PASS:-changeme-db}
+    volumes:
+      - /mnt/user/appdata/nextcloud-db:/var/lib/mysql
+    command: >
+      --transaction-isolation=READ-COMMITTED
+      --log-bin=binlog
+      --binlog-format=ROW
+      --innodb-file-per-table=1
+      --skip-innodb-read-only-compressed
+    networks:
+      storage_net:
+        ipv4_address: 172.24.0.10
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # ⚡ Redis - Cache for Nextcloud
+  # ──────────────────────────────────────────────────────────
+  nextcloud-redis:
+    image: redis:7-alpine
+    container_name: nextcloud-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --requirepass ${NC_REDIS_PASS:-changeme-redis}
+    volumes:
+      - /mnt/user/appdata/nextcloud-redis:/data
+    networks:
+      storage_net:
+        ipv4_address: 172.24.0.11
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${NC_REDIS_PASS:-changeme-redis}", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ──────────────────────────────────────────────────────────
+  # ☁️ Nextcloud - Self-Hosted Cloud
+  # ──────────────────────────────────────────────────────────
+  nextcloud:
+    image: nextcloud:30-apache
+    container_name: nextcloud
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+      - MYSQL_HOST=172.24.0.10
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=${NC_DB_PASS:-changeme-db}
+      - REDIS_HOST=172.24.0.11
+      - REDIS_HOST_PASSWORD=${NC_REDIS_PASS:-changeme-redis}
+      - NEXTCLOUD_TRUSTED_DOMAINS=192.168.1.222 brawn.sjhome.internal
+      - OVERWRITEPROTOCOL=http
+      - OVERWRITEHOST=192.168.1.222:8443
+    volumes:
+      - /mnt/user/appdata/nextcloud/html:/var/www/html
+      - /mnt/user/appdata/nextcloud/data:/var/www/html/data
+    ports:
+      - "8443:80"
+    networks:
+      storage_net:
+        ipv4_address: 172.24.0.12
+    depends_on:
+      nextcloud-db:
+        condition: service_healthy
+      nextcloud-redis:
+        condition: service_healthy

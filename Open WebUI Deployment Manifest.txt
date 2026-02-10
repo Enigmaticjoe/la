@@ -1,0 +1,356 @@
+﻿Here is the complete VOID PROTOCOL: GLOBAL DEPLOYMENT MANIFEST. This is your master documentation. Copy this entire block, save it as README_VOID.md, and treat it as the constitution for your new digital sovereign state.
+________________
+VOID PROTOCOL // DEPLOYMENT MANIFEST
+PROJECT: CHIMERA (THE GOLDEN STACK)
+CLASSIFICATION: EYES ONLY
+ARCHITECT: VOID
+TARGET: UNRAID (RTX 4070 // 12GB VRAM)
+VERSION: 3.0 (RENEGADE)
+________________
+1. MISSION BRIEF
+We are deploying a fully autonomous, self-hosted AI ecosystem. This is not a toy. This is a production-grade intelligence stack designed to bypass corporate controls (AChange) and run locally on your hardware.
+The Stack:
+* The Brain: Open WebUI (Orchestration & Chat Interface)
+* The Engine: vLLM running Dolphin 2.9.4 Llama 3.1 8B AWQ (Uncensored, Optimized for 12GB VRAM)
+* The Memory: Qdrant (Vector Database) + Qwen 2.5 (Embeddings)
+* The Voice: Wyoming Whisper (Speech-to-Text) + Piper (Text-to-Speech)
+* The Face: Jules Protocol Dashboard (System Status)
+________________
+2. INFRASTRUCTURE PREP
+HARDWARE REQUIREMENTS
+* GPU: NVIDIA RTX 4070 (12GB VRAM) - Crucial: We pin VRAM usage to prevent OOM.
+* OS: Unraid (Version 6.12+)
+* Tools: Community Applications, Portainer (App Store), User Scripts Plugin.
+DIRECTORY MAPPING
+We are standardizing on /mnt/user/appdata/brain_ai. Do not deviate, or the scripts will fail.
+Command (Run via Unraid Terminal):
+
+
+Bash
+
+
+
+
+mkdir -p /mnt/user/appdata/brain_ai/{models,qdrant,open-webui,dashboard,whisper,piper}
+mkdir -p /mnt/user/appdata/brain_ai/models/{llm,embed,rerank}
+chown -R 99:100 /mnt/user/appdata/brain_ai
+chmod -R 777 /mnt/user/appdata/brain_ai
+
+________________
+3. PHASE I: THE PURGE
+Objective: Remove conflicts, ghost containers, and broken networks.
+Instructions:
+1. Install User Scripts plugin in Unraid if you haven't.
+2. Create a new script named VOID_PURGE.
+3. Paste the code below and run it.
+
+
+Bash
+
+
+
+
+#!/bin/bash
+# SCRIPT: VOID_PURGE
+echo ">>> [VOID] INITIATING SYSTEM SCRUB..."
+
+# 1. STOP & DESTROY GHOST CONTAINERS
+# Targets any container with key AI keywords to ensure a clean slate.
+docker ps -a | grep -E 'ollama|vllm|open-webui|qdrant|whisper|piper|brain_' | awk '{print $1}' | xargs -r docker stop
+docker ps -a | grep -E 'ollama|vllm|open-webui|qdrant|whisper|piper|brain_' | awk '{print $1}' | xargs -r docker rm
+
+# 2. FLUSH NETWORKS
+# Fixes the "Gateway overlap" and "Address already in use" errors.
+docker network prune -f
+
+# 3. PERMISSION RESET
+echo ">>> [VOID] RESETTING FILESYSTEM PERMISSIONS..."
+chown -R 99:100 /mnt/user/appdata/brain_ai
+chmod -R 777 /mnt/user/appdata/brain_ai
+
+echo ">>> [VOID] SYSTEM CLEAN. READY FOR INJECTION."
+
+________________
+4. PHASE II: INTELLIGENCE ACQUISITION
+Objective: Download the specific AI models optimized for your hardware. We use a temporary Docker container to avoid dependency hell on the host OS.
+Instructions:
+1. Create a new User Script named VOID_FETCH.
+2. Paste the code below.
+3. Run in Background (This will take time depending on your internet speed).
+4. Monitor: Check logs by clicking the "Log" button on the script. Wait for "ASSETS SECURED".
+
+
+Bash
+
+
+
+
+#!/bin/bash
+# SCRIPT: VOID_FETCH
+MODEL_DIR="/mnt/user/appdata/brain_ai/models"
+
+# --- THE PAYLOAD ---
+# LLM: Dolphin 2.9.4 (8B) - Uncensored, fast, fits in 12GB VRAM.
+LLM_REPO="solidrust/dolphin-2.9.4-llama3.1-8b-AWQ"
+# EMBED: Qwen 2.5 - High performance semantic understanding.
+EMBED_REPO="Qwen/Qwen2.5-Embedding"
+# RERANK: BAAI Large - Critical for RAG accuracy.
+RERANK_REPO="BAAI/bge-reranker-large"
+
+echo ">>> [VOID] DEPLOYING DOWNLOADER DRONE..."
+
+docker run --rm \
+ -v "$MODEL_DIR":/data \
+ -e HF_HUB_ENABLE_HF_TRANSFER=1 \
+ python:3.11-slim \
+ bash -c "pip install -q huggingface_hub[cli] hf_transfer && \
+ echo '>>> [1/3] DOWNLOADING LLM...' && \
+ huggingface-cli download $LLM_REPO --local-dir /data/llm --local-dir-use-symlinks False --include '*.json' '*.safetensors' '*.model' && \
+ echo '>>> [2/3] DOWNLOADING EMBEDDER...' && \
+ huggingface-cli download $EMBED_REPO --local-dir /data/embed --local-dir-use-symlinks False && \
+ echo '>>> [3/3] DOWNLOADING RERANKER...' && \
+ huggingface-cli download $RERANK_REPO --local-dir /data/rerank --local-dir-use-symlinks False"
+
+echo ">>> [VOID] ASSETS SECURED. PERMISSION FIX APPLIED."
+chown -R 99:100 "$MODEL_DIR"
+
+________________
+5. PHASE III: THE GOLDEN STACK (DEPLOYMENT)
+Objective: Spin up the infrastructure using Portainer.
+Instructions:
+1. Open Portainer > Stacks > Add stack.
+2. Name: brain_ai_stack
+3. Paste the YAML below.
+4. Click Deploy the stack.
+
+
+YAML
+
+
+
+
+version: '3.8'
+
+services:
+ # [THE ENGINE] vLLM: Serves the LLM API
+ vllm:
+   image: vllm/vllm-openai:v0.15.1
+   container_name: brain_vllm
+   runtime: nvidia
+   deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: 1
+             capabilities: [gpu]
+   environment:
+     - NVIDIA_VISIBLE_DEVICES=all
+     - NCCL_P2P_DISABLE=1
+   volumes:
+     - /mnt/user/appdata/brain_ai/models/llm:/model:ro
+   command: >
+     --model /model
+     --quantization awq_marlin
+     --gpu-memory-utilization 0.60
+     --max-model-len 8192
+     --enforce-eager
+     --served-model-name dolphin-8b
+     --port 8000
+    ports:
+     - "8000:8000"
+   ipc: host
+   networks:
+     - ai_grid
+
+ # [THE BRAIN] Open WebUI: The Chat Interface
+ open-webui:
+   image: ghcr.io/open-webui/open-webui:main
+   container_name: brain_webui
+   restart: unless-stopped
+   ports:
+     - "3000:8080"
+   environment:
+     - OPENAI_API_BASE_URL=http://vllm:8000/v1
+     - OPENAI_API_KEY=sk-void-key
+     - WEBUI_SECRET_KEY=JULES_PROTOCOL_SECURE_KEY
+     # RAG Configuration (Retrieval Augmented Generation)
+     - ENABLE_RAG_WEB_SEARCH=True
+     - RAG_EMBEDDING_ENGINE=openai
+     - RAG_OPENAI_API_BASE_URL=http://tei-embed:80/v1
+     - RAG_OPENAI_API_KEY=sk-void
+     - RAG_RERANKING_MODEL=BAAI/bge-reranker-large
+     - RAG_EXTERNAL_RERANKER_URL=http://tei-rerank:80/rerank
+     - RAG_EXTERNAL_RERANKER_API_KEY=sk-void
+     - VECTOR_DB_URL=http://qdrant:6333
+   volumes:
+     - /mnt/user/appdata/brain_ai/open-webui:/app/backend/data
+   networks:
+     - ai_grid
+
+ # [SEMANTIC MEMORY] Text Embeddings Interface
+ tei-embed:
+   image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+   container_name: brain_embed
+   volumes:
+     - /mnt/user/appdata/brain_ai/models/embed:/data:ro
+   command: --model-id /data --port 80 --auto-truncate
+   networks:
+     - ai_grid
+
+ # [CRITICAL THINKING] Reranker
+ tei-rerank:
+   image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+   container_name: brain_rerank
+   volumes:
+     - /mnt/user/appdata/brain_ai/models/rerank:/data:ro
+   command: --model-id /data --port 80 --auto-truncate
+   networks:
+     - ai_grid
+
+ # [LONG TERM STORAGE] Qdrant
+ qdrant:
+   image: qdrant/qdrant:latest
+   container_name: brain_memory
+   volumes:
+     - /mnt/user/appdata/brain_ai/qdrant:/qdrant/storage
+   networks:
+     - ai_grid
+
+ # [EARS] Wyoming Whisper (GPU Accelerated)
+ whisper:
+   image: rhasspy/wyoming-whisper:latest
+   container_name: brain_ears
+   command: --model medium --language en --device cuda
+   volumes:
+     - /mnt/user/appdata/brain_ai/whisper:/data
+   runtime: nvidia
+   deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: 1
+             capabilities: [gpu]
+   ports:
+     - "10300:10300"
+   networks:
+     - ai_grid
+
+ # [VOICE] Wyoming Piper (TTS)
+ piper:
+   image: rhasspy/wyoming-piper:latest
+   container_name: brain_voice
+   command: --voice en_US-lessac-medium
+   volumes:
+     - /mnt/user/appdata/brain_ai/piper:/data
+   ports:
+     - "10200:10200"
+   networks:
+     - ai_grid
+
+ # [THE FACE] Jules Dashboard
+ dashboard:
+   image: nginx:alpine
+   container_name: brain_dashboard
+   ports:
+     - "8090:80"
+   volumes:
+     - /mnt/user/appdata/brain_ai/dashboard:/usr/share/nginx/html:ro
+   networks:
+     - ai_grid
+
+networks:
+ ai_grid:
+   driver: bridge
+
+________________
+6. PHASE IV: THE JULES DASHBOARD
+Objective: Deploy the visual interface.
+Instructions:
+1. Create a file at /mnt/user/appdata/brain_ai/dashboard/index.html.
+2. Paste the content below into that file.
+
+
+HTML
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <title>JULES PROTOCOL // CHIMERA</title>
+   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+   <script src="https://cdn.tailwindcss.com"></script>
+   <script src="https://unpkg.com/lucide@latest"></script>
+   <style>body { background-color: #000; color: #e5e7eb; font-family: monospace; }</style>
+</head>
+<body>
+   <div id="root"></div>
+   <script type="text/babel">
+       const { useState, useEffect } = React;
+       const { Terminal, Activity, Zap, Mic, Cpu } = lucide;
+
+       const JulesProtocol = () => {
+           return (
+               <div className="min-h-screen p-8 bg-black text-green-500 font-mono">
+                   <header className="mb-12 border-b border-green-800 pb-4 flex justify-between items-end">
+                       <div>
+                           <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
+                               <Terminal className="w-8 h-8" /> JULES PROTOCOL
+                           </h1>
+                           <p className="text-green-800">PROJECT CHIMERA // VARIANT: RENEGADE</p>
+                       </div>
+                       <div className="text-right"><div className="text-xl font-bold animate-pulse">SYSTEM NOMINAL</div></div>
+                   </header>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                       <div className="border border-green-900 p-6 rounded bg-gray-900/50">
+                           <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><Cpu /> CORE LOGIC</h2>
+                           <div className="flex justify-between mb-2"><span>MODEL</span><span className="text-green-400">DOLPHIN 8B AWQ</span></div>
+                           <div className="flex justify-between"><span>VRAM ALLOC</span><span className="text-green-400">60% (PINNED)</span></div>
+                       </div>
+
+                       <div className="border border-green-900 p-6 rounded bg-gray-900/50">
+                           <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><Mic /> WYOMING PROTOCOL</h2>
+                           <div className="flex justify-between mb-2"><span>EARS (WHISPER)</span><span className="text-green-400">PORT 10300</span></div>
+                           <div className="flex justify-between"><span>VOICE (PIPER)</span><span className="text-green-400">PORT 10200</span></div>
+                       </div>
+
+                       <div className="border border-green-900 p-6 rounded bg-gray-900/50">
+                           <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><Zap /> QUICK LINKS</h2>
+                           <div className="space-y-2">
+                               <a href="http://YOUR_UNRAID_IP:3000" className="block w-full text-center py-2 border border-green-700 hover:bg-green-900 rounded">LAUNCH OPEN WEBUI</a>
+                               <a href="http://YOUR_UNRAID_IP:9000" className="block w-full text-center py-2 border border-purple-900 text-purple-400 hover:bg-purple-900/20 rounded">PORTAINER ADMIN</a>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+           );
+       };
+       const root = ReactDOM.createRoot(document.getElementById('root'));
+       root.render(<JulesProtocol />);
+       lucide.createIcons();
+   </script>
+</body>
+</html>
+
+________________
+7. FINAL CONFIGURATION
+Accessing the System:
+1. Open WebUI: http://<UNRAID-IP>:3000
+2. Dashboard: http://<UNRAID-IP>:8090
+Home Assistant Integration (Wyoming):
+1. Go to Settings > Devices > Add Integration > Wyoming Protocol.
+2. Host: <UNRAID-IP>
+3. Port: 10300 (Add again for port 10200).
+4. Result: You now have local, GPU-accelerated voice control.
+Troubleshooting:
+* Stuck Loading? Check logs: docker logs brain_vllm. Look for "Application startup complete".
+* OOM Error? Reduce gpu-memory-utilization in YAML to 0.55.
+________________
+END OF MANIFEST — VOID

@@ -1,0 +1,215 @@
+# ==============================================================================
+# AI Inference Stack - Portainer Compose
+# ==============================================================================
+# Deploy via: Portainer > Stacks > Add Stack > Paste this YAML
+#
+# Prerequisites:
+#   1. Run ai-model-downloader.sh first to pre-download models
+#   2. NVIDIA Container Toolkit installed on Unraid
+#   3. Stop Ollama before deploying: docker stop ollama
+#
+# Hardware: RTX 4070 (12GB VRAM)
+# VRAM Budget:
+#   vLLM (dolphin-2.9.4-llama3.1-8b-AWQ): ~5.5 GB
+#   System/overhead:                        ~1.5 GB
+#   Free for KV cache:                      ~5.0 GB
+#   TEI Embed + Rerank: CPU-only (no VRAM)
+# ==============================================================================
+
+networks:
+  ai_grid:
+    driver: bridge
+
+services:
+  # ============================================================================
+  # vLLM - LLM Inference Engine (Dolphin Uncensored)
+  # ============================================================================
+  # OpenAI-compatible API at http://UNRAID_IP:8880/v1
+  # ============================================================================
+  vllm:
+    image: vllm/vllm-openai:v0.8.5
+    container_name: vllm
+    runtime: nvidia
+    restart: unless-stopped
+    ports:
+      - "8880:8000"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HF_HUB_OFFLINE=1
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+    volumes:
+      - /mnt/user/appdata/huggingface/vllm-models:/models:ro
+      - /mnt/user/appdata/huggingface/hub:/root/.cache/huggingface:ro
+    command:
+      - --model
+      - /models/solidrust/dolphin-2.9.4-llama3.1-8b-AWQ
+      - --quantization
+      - awq_marlin
+      - --dtype
+      - half
+      - --gpu-memory-utilization
+      - "0.75"
+      - --max-model-len
+      - "16384"
+      - --max-num-seqs
+      - "8"
+      - --enable-prefix-caching
+      - --served-model-name
+      - dolphin-2.9.4
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+    shm_size: "4gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  # ============================================================================
+  # TEI Embeddings - Text Embeddings Inference (CPU)
+  # ============================================================================
+  # Embedding API at http://UNRAID_IP:8881
+  # ============================================================================
+  tei-embed:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    container_name: tei-embed
+    restart: unless-stopped
+    ports:
+      - "8881:80"
+    volumes:
+      - /mnt/user/appdata/huggingface/tei-embed-data:/data:ro
+    command:
+      - --model-id
+      - /data/Qwen/Qwen3-Embedding-0.6B
+      - --port
+      - "80"
+      - --max-client-batch-size
+      - "32"
+      - --max-batch-tokens
+      - "16384"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  # ============================================================================
+  # TEI Reranker - Cross-encoder for RAG reranking (CPU)
+  # ============================================================================
+  # Reranker API at http://UNRAID_IP:8882
+  # ============================================================================
+  tei-rerank:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    container_name: tei-rerank
+    restart: unless-stopped
+    ports:
+      - "8882:80"
+    volumes:
+      - /mnt/user/appdata/huggingface/tei-rerank-data:/data:ro
+    command:
+      - --model-id
+      - /data/BAAI/bge-reranker-large
+      - --port
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  # ============================================================================
+  # Qdrant - Vector Database for RAG
+  # ============================================================================
+  # REST API at http://UNRAID_IP:6333
+  # gRPC at http://UNRAID_IP:6334
+  # ============================================================================
+  qdrant:
+    image: qdrant/qdrant:v1.14.0
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - /mnt/user/appdata/qdrant/storage:/qdrant/storage
+      - /mnt/user/appdata/qdrant/snapshots:/qdrant/snapshots
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD_KB=20480
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  # ============================================================================
+  # AnythingLLM - RAG Frontend & Document Workspace
+  # ============================================================================
+  # Web UI at http://UNRAID_IP:3001
+  # Containers on the same bridge network resolve each other by container_name
+  # ============================================================================
+  anythingllm:
+    image: mintplexlabs/anythingllm:latest
+    container_name: anythingllm
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - /mnt/user/appdata/anythingllm:/app/server/storage
+    environment:
+      - STORAGE_DIR=/app/server/storage
+      # -- LLM Provider (vLLM via OpenAI-compatible API) --
+      - LLM_PROVIDER=generic-openai
+      - GENERIC_OPEN_AI_BASE_PATH=http://vllm:8000/v1
+      - GENERIC_OPEN_AI_MODEL_PREF=dolphin-2.9.4
+      - GENERIC_OPEN_AI_TOKEN_LIMIT=16384
+      - GENERIC_OPEN_AI_MAX_TOKENS=2048
+      # -- Embedding Provider (TEI) --
+      - EMBEDDING_ENGINE=generic-openai
+      - GENERIC_OPEN_AI_EMBEDDING_URL=http://tei-embed:80/v1
+      - GENERIC_OPEN_AI_EMBEDDING_MODEL_PREF=Qwen/Qwen3-Embedding-0.6B
+      # -- Vector Database (Qdrant) --
+      - VECTOR_DB=qdrant
+      - QDRANT_ENDPOINT=http://qdrant:6333
+    depends_on:
+      vllm:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      tei-embed:
+        condition: service_healthy
+    networks:
+      - ai_grid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"

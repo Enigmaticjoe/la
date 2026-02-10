@@ -1,0 +1,436 @@
+###############################################################################
+# 02-media-stack.yml
+# BRAWN (192.168.1.222) - Complete Media Stack
+# Deploy via: Portainer (192.168.1.222:8008) → Stacks → Add Stack
+#
+# BEFORE DEPLOYING: Create .env file at /mnt/user/appdata/media-stack.env
+# or add env vars in Portainer stack environment section
+#
+# Services: Zurg, rclone, Plex, Jellyfin, Sonarr, Radarr, Lidarr,
+#           Prowlarr, Bazarr, Overseerr, Tautulli, RDT-Client,
+#           Gluetun + qBittorrent
+#
+# Network: media_net (172.22.0.0/16)
+###############################################################################
+
+networks:
+  media_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+
+services:
+  # ============================================================================
+  #  REAL-DEBRID LAYER
+  # ============================================================================
+
+  # ──────────────────────────────────────────────────────────
+  # ⚡ Zurg - Real-Debrid WebDAV Gateway
+  # ──────────────────────────────────────────────────────────
+  zurg:
+    image: ghcr.io/debridmediamanager/zurg-testing:latest
+    container_name: zurg
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - /mnt/user/appdata/zurg/config/config.yml:/app/config.yml:ro
+      - /mnt/user/appdata/zurg/data:/app/data
+    ports:
+      - "9090:9999"
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9999/dav/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # 📂 Rclone - FUSE Mount for Zurg WebDAV
+  # ──────────────────────────────────────────────────────────
+  rclone:
+    image: rclone/rclone:latest
+    container_name: rclone-zurg
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+      - PUID=99
+      - PGID=100
+    volumes:
+      - /mnt/user/media/zurg_RD:/data:rshared
+      - /mnt/user/appdata/rclone:/config/rclone
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    devices:
+      - /dev/fuse:/dev/fuse:rwm
+    depends_on:
+      zurg:
+        condition: service_healthy
+    command: >
+      mount zurg: /data
+      --config=/config/rclone/rclone.conf
+      --allow-non-empty
+      --allow-other
+      --uid=99
+      --gid=100
+      --umask=002
+      --dir-cache-time=10s
+      --vfs-cache-mode=full
+      --vfs-cache-max-size=50G
+      --vfs-cache-max-age=24h
+      --vfs-read-chunk-size=64M
+      --vfs-read-chunk-size-limit=2G
+      --buffer-size=64M
+      --poll-interval=15s
+    healthcheck:
+      test: ["CMD", "ls", "/data"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.11
+
+  # ──────────────────────────────────────────────────────────
+  # 🔄 RDT-Client - Real-Debrid Torrent Client
+  # ──────────────────────────────────────────────────────────
+  rdt-client:
+    image: rogerfar/rdtclient:latest
+    container_name: rdt-client
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+      - PUID=99
+      - PGID=100
+    volumes:
+      - /mnt/user/appdata/rdt-client:/data/db
+      - /mnt/user/downloads:/data/downloads
+    ports:
+      - "6500:6500"
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.12
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6500"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ============================================================================
+  #  VPN + TORRENT LAYER
+  # ============================================================================
+
+  # ──────────────────────────────────────────────────────────
+  # 🔒 Gluetun - VPN Container
+  # ──────────────────────────────────────────────────────────
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "8090:8090"          # qBittorrent WebUI
+      - "6881:6881"          # Torrent traffic
+      - "6881:6881/udp"
+    volumes:
+      - /mnt/user/appdata/gluetun:/gluetun
+    environment:
+      - TZ=America/New_York
+      - VPN_SERVICE_PROVIDER=${VPN_PROVIDER:-custom}
+      - VPN_TYPE=wireguard
+      - WIREGUARD_ENDPOINT_IP=${VPN_ENDPOINT_IP}
+      - WIREGUARD_ENDPOINT_PORT=${VPN_ENDPOINT_PORT:-51820}
+      - WIREGUARD_PUBLIC_KEY=${WIREGUARD_PUBLIC_KEY}
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
+      - DNS_ADDRESS=10.64.0.1
+      - HEALTH_VPN_DURATION_INITIAL=30s
+    healthcheck:
+      test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.13
+
+  # ──────────────────────────────────────────────────────────
+  # ⬇️ qBittorrent - Torrent Client (through VPN)
+  # ──────────────────────────────────────────────────────────
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+      - WEBUI_PORT=8090
+    volumes:
+      - /mnt/user/appdata/qbittorrent:/config
+      - /mnt/user/downloads:/downloads
+    depends_on:
+      gluetun:
+        condition: service_healthy
+
+  # ============================================================================
+  #  MEDIA SERVERS
+  # ============================================================================
+
+  # ──────────────────────────────────────────────────────────
+  # 🎬 Plex - Primary Media Server
+  # ──────────────────────────────────────────────────────────
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+      - VERSION=docker
+      - PLEX_CLAIM=${PLEX_CLAIM:-}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+    volumes:
+      - /mnt/user/appdata/plex:/config
+      - /mnt/user/media:/data
+      - /tmp:/transcode
+    devices:
+      - /dev/dri:/dev/dri
+    runtime: nvidia
+
+  # ──────────────────────────────────────────────────────────
+  # 🍿 Jellyfin - Secondary Media Server
+  # ──────────────────────────────────────────────────────────
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+    volumes:
+      - /mnt/user/appdata/jellyfin:/config
+      - /mnt/user/media:/data
+    ports:
+      - "8096:8096"
+    devices:
+      - /dev/dri:/dev/dri
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.20
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      rclone:
+        condition: service_healthy
+
+  # ============================================================================
+  #  ARR STACK
+  # ============================================================================
+
+  # ──────────────────────────────────────────────────────────
+  # 🔍 Prowlarr - Indexer Manager
+  # ──────────────────────────────────────────────────────────
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+    volumes:
+      - /mnt/user/appdata/prowlarr:/config
+    ports:
+      - "9696:9696"
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.30
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9696/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ──────────────────────────────────────────────────────────
+  # 📺 Sonarr - TV Show Manager
+  # ──────────────────────────────────────────────────────────
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+    volumes:
+      - /mnt/user/appdata/sonarr:/config
+      - /mnt/user/media:/data
+      - /mnt/user/downloads:/downloads
+    ports:
+      - "8989:8989"
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.31
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      prowlarr:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────
+  # 🎥 Radarr - Movie Manager
+  # ──────────────────────────────────────────────────────────
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+    volumes:
+      - /mnt/user/appdata/radarr:/config
+      - /mnt/user/media:/data
+      - /mnt/user/downloads:/downloads
+    ports:
+      - "7878:7878"
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.32
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7878/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      prowlarr:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────
+  # 🎵 Lidarr - Music Manager
+  # ──────────────────────────────────────────────────────────
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+    volumes:
+      - /mnt/user/appdata/lidarr:/config
+      - /mnt/user/media:/data
+      - /mnt/user/downloads:/downloads
+    ports:
+      - "8686:8686"
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.33
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8686/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ──────────────────────────────────────────────────────────
+  # 💬 Bazarr - Subtitle Manager
+  # ──────────────────────────────────────────────────────────
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+    volumes:
+      - /mnt/user/appdata/bazarr:/config
+      - /mnt/user/media:/data
+    ports:
+      - "6767:6767"
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.34
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6767/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ──────────────────────────────────────────────────────────
+  # 🎯 Overseerr - Request Manager
+  # ──────────────────────────────────────────────────────────
+  overseerr:
+    image: sctx/overseerr:latest
+    container_name: overseerr
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+    volumes:
+      - /mnt/user/appdata/overseerr:/app/config
+    ports:
+      - "5055:5055"
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.35
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5055/api/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ──────────────────────────────────────────────────────────
+  # 📈 Tautulli - Plex Analytics
+  # ──────────────────────────────────────────────────────────
+  tautulli:
+    image: lscr.io/linuxserver/tautulli:latest
+    container_name: tautulli
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York
+    volumes:
+      - /mnt/user/appdata/tautulli:/config
+    ports:
+      - "8181:8181"
+    networks:
+      media_net:
+        ipv4_address: 172.22.0.36
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

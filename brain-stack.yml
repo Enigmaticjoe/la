@@ -1,0 +1,177 @@
+###############################################################################
+# brain-stack.yml (vLLM ONLY - No Ollama)
+# NODE B (Brain) - Pop!_OS | Ultra 9 285K | RX 7900 XT 20GB | 128GB DDR5
+#
+# Deploy: docker compose -f brain-stack.yml up -d
+#
+# GPU BUDGET (RX 7900 XT 20GB via ROCm):
+#   vLLM:   ~18GB (90%) — large quantized models up to 70B Q4
+#   Buffer: ~2GB
+#
+# MODEL SWITCHING: Stop container, change --model in compose, restart.
+#   Or run multiple vLLM instances on different ports with different
+#   --gpu-memory-utilization splits (e.g. 0.45 + 0.45).
+#
+# PORTS:
+#   8000 - vLLM OpenAI-compatible API (primary model)
+#   8001 - vLLM secondary model (optional, uncomment below)
+#   3000 - OpenWebUI (Brain-local)
+###############################################################################
+
+networks:
+  brain_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/16
+
+services:
+  # ──────────────────────────────────────────────────────────
+  # ⚡ vLLM Primary - Heavy Model Inference (ROCm)
+  # 90% of 20GB = ~18GB VRAM
+  # Swap models by changing --model and restarting
+  # ──────────────────────────────────────────────────────────
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: brain-vllm
+    restart: unless-stopped
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - HSA_OVERRIDE_GFX_VERSION=11.0.0
+      - ROCM_PATH=/opt/rocm
+      - PYTORCH_ROCM_ARCH=gfx1100
+      - HIP_VISIBLE_DEVICES=0
+      - VLLM_ROCM_USE_AITER=1
+      - VLLM_ROCM_USE_AITER_RMSNORM=1
+      - VLLM_ROCM_USE_AITER_MOE=1
+      - VLLM_USE_TRITON_FLASH_ATTN=0
+      - HIP_FORCE_DEV_KERNARG=1
+    volumes:
+      - /home/brains/ai-models:/root/.cache/huggingface
+    ports:
+      - "8000:8000"
+    command:
+      - --model
+      - cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-AWQ
+      - --quantization
+      - awq
+      - --dtype
+      - half
+      - --gpu-memory-utilization
+      - "0.90"
+      - --max-model-len
+      - "16384"
+      - --max-num-seqs
+      - "16"
+      - --port
+      - "8000"
+      - --host
+      - "0.0.0.0"
+      - --device
+      - auto
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - hermes
+    networks:
+      brain_net:
+        ipv4_address: 172.31.0.10
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - "992"
+    ipc: host
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 240s
+
+  # ──────────────────────────────────────────────────────────
+  # ⚡ vLLM Secondary (OPTIONAL - uncomment to run 2 models)
+  # Split: primary 50% + secondary 40% = 90% total
+  # To enable: uncomment below AND change primary to 0.50
+  # ──────────────────────────────────────────────────────────
+  # vllm-secondary:
+  #   image: vllm/vllm-openai:latest
+  #   container_name: brain-vllm-secondary
+  #   restart: unless-stopped
+  #   environment:
+  #     - HF_HOME=/root/.cache/huggingface
+  #     - HSA_OVERRIDE_GFX_VERSION=11.0.0
+  #     - ROCM_PATH=/opt/rocm
+  #     - PYTORCH_ROCM_ARCH=gfx1100
+  #     - HIP_VISIBLE_DEVICES=0
+  #     - VLLM_ROCM_USE_AITER=1
+  #     - VLLM_ROCM_USE_AITER_RMSNORM=1
+  #     - VLLM_ROCM_USE_AITER_MOE=1
+  #     - VLLM_USE_TRITON_FLASH_ATTN=0
+  #     - HIP_FORCE_DEV_KERNARG=1
+  #   volumes:
+  #     - /home/brains/ai-models:/root/.cache/huggingface
+  #   ports:
+  #     - "8001:8000"
+  #   command:
+  #     - --model
+  #     - Qwen/Qwen2.5-7B-Instruct-AWQ
+  #     - --quantization
+  #     - awq
+  #     - --dtype
+  #     - half
+  #     - --gpu-memory-utilization
+  #     - "0.40"
+  #     - --max-model-len
+  #     - "8192"
+  #     - --port
+  #     - "8000"
+  #     - --host
+  #     - "0.0.0.0"
+  #     - --device
+  #     - auto
+  #   networks:
+  #     brain_net:
+  #       ipv4_address: 172.31.0.11
+  #   devices:
+  #     - /dev/kfd:/dev/kfd
+  #     - /dev/dri:/dev/dri
+  #   group_add:
+  #     - video
+  #     - "992"
+  #   ipc: host
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 240s
+
+  # ──────────────────────────────────────────────────────────
+  # 💬 OpenWebUI - Brain-Local Chat Interface
+  # ──────────────────────────────────────────────────────────
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: brain-openwebui
+    restart: unless-stopped
+    environment:
+      - OPENAI_API_BASE_URLS=http://172.31.0.10:8000/v1
+      - OPENAI_API_KEYS=sk-brain-local
+      - WEBUI_AUTH=true
+      - WEBUI_NAME=Brain AI
+    volumes:
+      - /home/brains/openwebui:/app/backend/data
+    ports:
+      - "3000:8080"
+    networks:
+      brain_net:
+        ipv4_address: 172.31.0.30
+    depends_on:
+      vllm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

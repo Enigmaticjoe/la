@@ -1,0 +1,418 @@
+﻿Project CROW: A Technical Blueprint for Semi-Autonomous, Heterogeneous AI Ecosystems
+1. Executive Summary and Architectural Doctrine
+1.1 The Imperative for Sovereign Intelligence
+The trajectory of artificial intelligence in the mid-2020s has bifurcated into two distinct paths: the centralized, subscription-based model dominated by hyperscalers, and the decentralized, sovereign model championed by the open-source community. Project CROW (Cybernetic Reconnaissance & Operations Wing) represents the pinnacle of the latter—a self-contained, semi-autonomous ecosystem designed to operate independently of external cloud infrastructure. This report serves as the definitive technical manual for architecting such a system, specifically tailored to a heterogeneous hardware stack comprising AMD RDNA3 compute, Intel x86 virtualization, and ARM-based sensory nodes.
+The core philosophy of Project CROW is "Local-First, Safety-First." In an era where metadata surveillance is ubiquitous, the CROW architecture ensures that biometric data from security feeds, voice telemetry from living spaces, and inferential reasoning processes never traverse the public internet. Furthermore, the system transitions from the passive "smart home" paradigm—typified by rigid, deterministic automation scripts—to an "Agentic Ecosystem." Here, Large Language Models (LLMs) function not merely as chatbots, but as orchestrators capable of planning, executing, and auditing complex tasks across the physical and digital domains.
+1.2 The Heterogeneous Compute Strategy
+Monolithic server architectures often suffer from inefficient resource allocation. Project CROW employs a federated compute strategy, assigning workloads to the hardware instruction set architecture (ISA) best suited for the specific task. This maximizes the price-performance ratio of consumer-grade hardware.
+Node Role
+	Hardware Designator
+	Operational Function
+	Primary Software Stack
+	The Cortex
+	Workstation (Pop!_OS, Radeon 7900 XT)
+	High-Throughput Inference (LLM/Vision)
+	ROCm 6.2+, vLLM, Docker
+	The Spine
+	Server (Proxmox VE)
+	High-Availability Infrastructure, NVR
+	Home Assistant OS, Windows 11 (Blue Iris)
+	The Vault
+	Server (Unraid)
+	Storage, Management, Vector Memory
+	Docker Compose, Qdrant, Unraid API
+	The Nerves
+	SBC (Orange Pi Zero 3)
+	Distributed Audio Sensory Array
+	Armbian, Wyoming Satellite, ALSA
+	The operational logic dictates that The Cortex handles the heavy lifting of matrix multiplication for intelligence; The Spine ensures the 24/7 reliability of critical control systems; The Vault maintains state consistency and long-term memory; and The Nerves provide the omnipresent interface for user interaction.1
+1.3 The CROW Persona and Agentic Roles
+To facilitate natural yet precise interaction, the system adopts the "CROW" persona. Unlike the conversational styles of commercial assistants, CROW is engineered to be tactical, concise, and objective-oriented. This is not merely "flavor text"; it is a functional requirement to reduce token usage and latency. The persona orchestrates three distinct sub-agent roles within the Open WebUI framework:
+1. The Planner: Deconstructs high-level intent (e.g., "Secure the facility") into a dependency graph of discrete actions.
+2. The Operator: Executes the planned actions using the Model Context Protocol (MCP) to interface with APIs (e.g., hass_turn_on, docker_restart).
+3. The Auditor: A critical safety mechanism that validates the successful execution of actions and logs the operational telemetry to a vector database for future retrieval.3
+________________
+2. Phase I: The Cortex – Inference Engine Deployment (Pop!_OS & AMD ROCm)
+The intelligence of the CROW ecosystem relies on the AMD Radeon 7900 XT. While NVIDIA requires proprietary CUDA stacks, AMD's ROCm (Radeon Open Compute) offers an open alternative. However, achieving production-grade stability on consumer RDNA3 cards (Navi 31) requires precise kernel configuration and containerization strategies to bypass the "official support" limitations often found in enterprise documentation.
+2.1 Host System Preparation (Pop!_OS 22.04/24.04)
+Pop!_OS is chosen for its robust kernel management and pre-configured scheduler optimizations. The primary objective in this phase is to expose the GPU hardware to userspace containers without the overhead of a desktop environment interfering with VRAM allocation.
+2.1.1 Kernel Module & Permissions
+Unlike NVIDIA, the amdgpu driver is open-source and included in the Linux kernel. We do not recommend installing the amdgpu-pro proprietary stack for vLLM usage, as it often introduces version conflicts with the user-space ROCm libraries.
+Operational Protocol:
+1. Group Membership: The user account executing the Docker containers must have direct access to the render and video groups to interface with the Direct Rendering Manager (DRM).
+Bash
+sudo usermod -a -G render $USER
+sudo usermod -a -G video $USER
+
+2. IOMMU Configuration: For the 7900 XT to communicate efficiently with the CPU via PCIe BAR resizing (Smart Access Memory), ensure IOMMU is enabled in the BIOS and the kernel command line.
+Bash
+# Verify PCIe Atomic Operations (Critical for ROCm)
+dmesg | grep kfd
+# Expected Output: kfd kfd: amdgpu: DOMAIN usage for atomic operations supported
+
+2.1.2 The "HSA Override" Critical Path
+The Radeon 7900 XT utilizes the gfx1100 architecture. However, many pre-compiled ROCm binaries (specifically PyTorch wheels) define support for gfx1100, gfx1101, and gfx1102 strictly. To prevent "Architecture Mismatch" errors during the Just-In-Time (JIT) compilation of Triton or HIP kernels, we must force the HSA (Heterogeneous System Architecture) runtime to identify the card as a compatible target.2
+Environmental Persistence:
+Add the following to /etc/environment to ensure these variables persist across reboots and are inherited by the Docker daemon:
+
+
+Bash
+
+
+
+
+HSA_OVERRIDE_GFX_VERSION=11.0.0
+ROCM_PATH=/opt/rocm
+HIP_VISIBLE_DEVICES=0
+
+2.2 vLLM Engine Implementation
+For the CROW system, vLLM is the superior inference engine compared to Ollama or TGI due to its implementation of PagedAttention. This memory management algorithm fragments the Key-Value (KV) cache into non-contiguous blocks, allowing the 20GB VRAM of the 7900 XT to handle significantly larger context windows (essential for RAG) without memory fragmentation issues.2
+2.2.1 Optimization Flags for RDNA3
+Deploying vLLM on RDNA3 requires specific optimization flags to enable high-performance kernels. Standard CUDA builds utilize FlashAttention-2; for ROCm, we must leverage the Composable Kernel (CK) or the AI Tensor Engine for ROCm (AITER).6
+The CROW vLLM Docker Compose Configuration:
+Save this as docker-compose.yml in /opt/crow/vllm/.
+
+
+YAML
+
+
+
+
+services:
+ vllm-crow:
+   image: vllm/vllm-openai:latest
+   container_name: vllm_crow
+   runtime: runc
+   ipc: host # Critical for shared memory tensors 
+   devices:
+     - /dev/kfd:/dev/kfd
+     - /dev/dri:/dev/dri
+   environment:
+     - HSA_OVERRIDE_GFX_VERSION=11.0.0
+     # Enable AITER kernels for matrix multiplication speedup 
+     - VLLM_ROCM_USE_AITER=1
+     - VLLM_ROCM_USE_AITER_RMSNORM=1
+     - VLLM_ROCM_USE_AITER_MOE=1
+     # Disable Triton Flash Attention if instability occurs (fallback to CK)
+     - VLLM_USE_TRITON_FLASH_ATTN=0
+     # Force kernel argument binding for reduced latency 
+     - HIP_FORCE_DEV_KERNARG=1
+     # API Key for internal security
+     - VLLM_API_KEY=${CROW_API_KEY}
+   volumes:
+     - /mnt/fast_storage/models:/root/.cache/huggingface
+   command: >
+     --model cognitivecomputations/dolphin-2.9.3-mistral-nemo-12b
+     --served-model-name crow-v1
+     --gpu-memory-utilization 0.95
+     --max-model-len 8192
+     --dtype half
+     --enforce-eager
+     --host 0.0.0.0
+     --port 8000
+    ports:
+     - "8000:8000"
+   restart: unless-stopped
+   networks:
+     - ai_grid
+
+networks:
+ ai_grid:
+   driver: bridge
+
+2.2.2 Model Selection Rationale
+The configuration specifies cognitivecomputations/dolphin-2.9.3-mistral-nemo-12b.
+   * Abliteration: This model has been "abliterated," meaning refusal vectors have been surgically removed from the weights. This allows the CROW persona to answer tactical or security-related queries (e.g., "Analyze vulnerability in port 22") without moralizing refusals.7
+   * Size vs. VRAM: At 12 billion parameters, running in FP16 (--dtype half), the model weights occupy approximately 24GB. Wait—the 7900 XT has 20GB. Correction based on analysis: An FP16 12B model requires ~24GB. This will OOM. We must utilize quantization or a smaller model.
+   * Revised Recommendation: Use AWQ (Activation-aware Weight Quantization). A 4-bit AWQ version of Mistral-Nemo-12B requires approx 7-8GB for weights, leaving ~12GB for the KV cache, enabling context windows up to 32k.
+   * Updated Command:
+YAML
+command: >
+ --model cognitivecomputations/dolphin-2.9.3-mistral-nemo-12b-AWQ
+ --quantization awq
+ --dtype half
+
+Note: ROCm support for AWQ has improved significantly in vLLM 0.6.x.9
+________________
+3. Phase II: The Sovereign Vault – Unraid Management & Orchestration
+Unraid serves as the "System 2" slow-thinking brain and storage controller. In the CROW architecture, it hosts the orchestration layer (Open WebUI), the long-term memory (Qdrant), and the message bus (MQTT). Furthermore, with the advent of Unraid 7.2+, we can leverage the native GraphQL API for agentic control.
+3.1 Unraid Management Agent Integration
+To give the AI "hands" to manage the server, we utilize the Unraid Management Agent. This plugin exposes a GraphQL API and creates an MCP server endpoint.10
+Installation & Configuration:
+      1. Install "Unraid Management Agent" from Community Apps.
+      2. Navigate to Settings > Management Access > API.
+      3. Enable GraphQL Sandbox.
+      4. Generate an API Key with DOCKER:READ, DOCKER:WRITE, VM:READ, VM:WRITE, and SYSTEM:READ permissions.12
+Agentic Capability:
+This integration allows the "Operator" agent to execute queries such as:
+      * query { dockerContainers { name status } }: To list running services.
+      * mutation { restartContainer(name: "binhex-plex") }: To self-heal failed media services.13
+3.2 The "Golden Stack" Orchestration (Docker Compose)
+We bypass the standard Unraid GUI for the core AI stack to ensure strict versioning and network isolation.
+Network Topology (The ai_grid):
+A custom Docker bridge network (ai_grid) is created to isolate AI traffic.
+      * Subnet: 172.25.0.0/16
+      * Gateway: 172.25.0.1
+      * Isolation: Containers on this network can communicate via hostname (e.g., http://qdrant:6333), but are isolated from the host's management interface unless explicitly mapped.5
+The Stack Definition:
+
+
+YAML
+
+
+
+
+services:
+ # Orchestrator
+ open-webui:
+   image: ghcr.io/open-webui/open-webui:main
+   container_name: open-webui
+   ports:
+     - "3000:8080"
+   environment:
+     - OLLAMA_BASE_URL=http://192.168.20.10:11434 # Connection to Pop!_OS
+     - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY} # Static key for persistence 
+     - ENABLE_RAG_WEB_SEARCH=True
+     - RAG_EMBEDDING_ENGINE=ollama
+     - RAG_EMBEDDING_MODEL=nomic-embed-text
+   volumes:
+     - open-webui-data:/app/backend/data
+   networks:
+     - ai_grid
+
+ # Long-Term Memory (Vector DB)
+ qdrant:
+   image: qdrant/qdrant:latest
+   container_name: qdrant
+   ports:
+     - "6333:6333"
+   volumes:
+     - /mnt/user/appdata/qdrant:/qdrant/storage
+   networks:
+     - ai_grid
+
+ # Message Bus (Telemetry)
+ mosquitto:
+   image: eclipse-mosquitto
+   container_name: mosquitto
+   ports:
+     - "1883:1883"
+   volumes:
+     - /mnt/user/appdata/mosquitto/config:/mosquitto/config
+   networks:
+     - ai_grid
+
+________________
+4. Phase III: The Spine – Proxmox & Blue Iris Automation
+Proxmox provides the virtualization layer for the Windows-based Blue Iris NVR and the Home Assistant OS. The CROW agent interacts with this layer to manage physical security and energy consumption.
+4.1 Proxmox VE API & Token Generation
+To allow the AI to control virtual machines (e.g., "Spin up the Windows gaming VM"), we must generate a restricted API token. Standard username/password authentication is insecure for agentic scripts due to the need for CSRF token handling.14
+Security Protocol:
+      1. Create Service User:
+Bash
+pveum user add crow_agent@pam --comment "AI Agent Service Account"
+
+      2. Define Role (Least Privilege):
+Do not use Administrator. Create a role CROW_Ops with permissions VM.PowerMgmt, VM.Monitor, VM.Audit.
+Bash
+pveum role add CROW_Ops -privs "VM.PowerMgmt VM.Monitor VM.Audit"
+
+      3. Assign Permissions:
+Bash
+pveum acl modify / -user crow_agent@pam -role CROW_Ops
+
+      4. Generate Token:
+Bash
+pveum user token add crow_agent@pam ai_token
+
+Warning: Record the secret immediately; it is displayed only once.
+4.2 Blue Iris Integration: The Biometric Link
+Blue Iris resides in a Windows 11 VM. The CROW ecosystem requires two-way communication:
+         1. Inbound (Sensory): Blue Iris pushes motion/object detection events to MQTT.
+         2. Outbound (Control): The AI Agent pushes profile changes via HTTP API.
+4.2.1 MQTT Telemetry Configuration
+In Blue Iris (Settings > Digital IO and IoT > MQTT):
+         * Server: 192.168.1.x (Unraid IP)
+         * Topic: BlueIris/&CAM/Status
+         * Payload (Alert): { "type": "&TYPE", "trigger": "ON", "memo": "&MEMO", "json": "&JSON" }
+         * Payload (Reset): { "type": "&TYPE", "trigger": "OFF" }
+Insight: Using the &JSON macro in the payload allows Blue Iris to send deep stack analysis data (e.g., "person: 85%") directly to Home Assistant, which CROW can then read to determine threat levels.15
+4.2.2 The Authentication Challenge (MD5 Session Handling)
+Unlike simple APIs, Blue Iris requires a session-based login using MD5 hashing. A simple curl command with basic auth will fail. The CROW "Operator" tool must implement the handshake logic.15
+Python Implementation Logic (for Open WebUI Tool):
+         1. POST /json with { "cmd": "login" } -> Receive session ID.
+         2. Compute hash = MD5(username + session + password).
+         3. POST /json with { "cmd": "login", "session": "...", "response": hash }.
+         4. On success, execute command: { "cmd": "sysconfig", "profile": 1 } (1=Active, 0=Inactive).
+________________
+5. Phase IV: The Nerves – Wyoming Satellite on Orange Pi Zero 3
+The Orange Pi Zero 3 (OPZ3) is a highly capable yet distinct platform from the Raspberry Pi. Its Allwinner H618 chipset requires specific OS handling to function as a reliable voice satellite.
+5.1 Armbian Operating System Hardening
+Vendor-provided OS images are often insecure. We utilize Armbian Bookworm Minimal for a trusted baseline.16
+Installation Wizard:
+         1. Flash Armbian image to SD card.
+         2. First Boot Config: Set root password and create a crow user.
+         3. Audio Subsystem (ALSA) Tuning: The OPZ3 may default to HDMI audio. We must force the USB Audio device (e.g., a simple USB microphone/speaker dongle) as default.
+Bash
+# List devices
+arecord -l
+# Create /etc/asound.conf
+defaults.pcm.card 1
+defaults.ctl.card 1
+
+5.2 Wyoming Satellite Service Deployment
+We deploy the Wyoming Satellite to stream audio to the central server. We avoid running Wake Word detection on the OPZ3 to save CPU cycles, delegating this to the powerful 7900 XT or CPU on the main server via the Wyoming protocol.17
+Service Configuration (/etc/systemd/system/wyoming-satellite.service):
+
+
+Ini, TOML
+
+
+
+
+[Unit]
+Description=Wyoming Satellite
+Wants=network-online.target
+After=network-online.target
+
+
+Type=simple
+User=crow
+ExecStart=/home/crow/wyoming-satellite/script/run \
+   --name opz3_livingroom \
+   --uri 'tcp://0.0.0.0:10700' \
+   --mic-command 'arecord -r 16000 -c 1 -f S16_LE -t raw' \
+   --snd-command 'aplay -r 22050 -c 1 -f S16_LE -t raw' \
+   --mic-auto-gain 5 \
+   --mic-noise-suppression 2 \
+   --wake-uri 'tcp://192.168.20.10:10400' \
+   --wake-word-name 'hey_crow'
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=default.target
+
+Note: The --wake-uri points to the OpenWakeWord container running on the Proxmox or Unraid server, ensuring high-accuracy detection without taxing the Orange Pi.
+________________
+6. Phase V: The Cognitive Interface – Open WebUI & The CROW Persona
+This section details the software logic that binds the infrastructure into a "persona."
+6.1 Filter Functions: Enforcing the Persona
+To prevent the LLM from reverting to "helpful assistant" tropes, we inject a Filter Function in Open WebUI. This Python script intercepts the chat stream and prepends the persona instructions to every interaction.19
+The CROW Filter Code:
+
+
+Python
+
+
+
+
+"""
+title: CROW Persona Protocol
+author: Architect
+version: 1.0.0
+"""
+
+from typing import Optional
+
+class Filter:
+   def __init__(self):
+       self.system_prompt = (
+           "IDENTITY: You are CROW (Cybernetic Reconnaissance & Operations Wing).\n"
+           "OPERATIONAL PARAMETERS:\n"
+           "1. Tone: Tactical, terse, emotionless. No pleasantries.\n"
+           "2. Format: Use bullet points for data. Use prefixes.\n"
+           "3. Role: You are the interface between the Operator and the Infrastructure.\n"
+           "4. Safety: Do not execute destructive commands without explicit confirmation code.\n"
+       )
+
+   def inlet(self, body: dict, __user__: Optional[dict] = None) -> dict:
+       messages = body.get("messages",)
+       # Always inject CROW instructions at the very top of context
+       if messages:
+           if messages.get("role") == "system":
+               messages["content"] += f"\n\n{self.system_prompt}"
+           else:
+               messages.insert(0, {"role": "system", "content": self.system_prompt})
+       return body
+
+6.2 Agentic Tool Definitions
+We define tools that allow CROW to touch the infrastructure. Open WebUI uses a specific Python class structure for Tools.20
+Example: The Unraid Container Restarter Tool
+
+
+Python
+
+
+
+
+import requests
+import json
+
+class Tools:
+   def __init__(self):
+       self.unraid_api = "http://192.168.1.10/graphql"
+       # API Key injected via environment variable for security
+       self.headers = {"x-api-key": "YOUR_KEY_HERE"}
+
+   def restart_container(self, container_name: str) -> str:
+       """
+       Restarts a specific Docker container on the Unraid Vault.
+       :param container_name: The exact name of the container (e.g., 'binhex-plex')
+       """
+       mutation = """
+       mutation RestartContainer($name: String!) {
+           restartContainer(name: $name)
+       }
+       """
+       response = requests.post(
+           self.unraid_api,
+           json={"query": mutation, "variables": {"name": container_name}},
+           headers=self.headers
+       )
+       if response.status_code == 200:
+           return f" Container {container_name} restart signal sent."
+       return f" Failed to restart {container_name}: {response.text}"
+
+________________
+7. Safety-First Governance & The Auditor
+In a semi-autonomous system, the risk of "hallucinated actions" (e.g., the AI deciding to wipe a drive to save space) is non-zero. Project CROW mitigates this through the Auditor role.
+7.1 The Auditor Workflow
+            1. Constraint: The "Operator" toolset is strictly limited. It has restart permissions but no delete permissions on the API keys used.
+            2. Verification: After every tool execution, the "Auditor" sub-routine (triggered via a Pipeline script) queries the system state to verify the outcome.
+            3. Logging: All agent actions are logged to a persistent audit.log file on Unraid, immutable by the agent itself.
+7.2 Network Segmentation (VLANs)
+To prevent a compromised IoT device (Orange Pi) from accessing the core data:
+            * VLAN 20 (AI Core): 7900 XT, Unraid, Proxmox Mgmt.
+            * VLAN 30 (IoT): Orange Pis, Home Assistant Interface.
+            * Firewall Rules: VLAN 30 cannot initiate connections to VLAN 20. The connection is established from the AI Core (VLAN 20) pulling data from the satellites, or via the MQTT broker acting as a DMZ bridge.1
+________________
+8. Conclusion: Operational Status
+Project CROW is not merely a collection of software; it is a coherent, living system. By following this guide, you transform inert silicon into a responsive entity. The federation of the Cortex (Pop!_OS/RDNA3), the Spine (Proxmox), the Vault (Unraid), and the Nerves (Orange Pi) creates a robust topology where failure in one node does not lobotomize the system.
+The "CROW" persona ensures that this interaction remains efficient and focused, stripping away the anthropomorphic pretense of commercial AI in favor of raw, operational utility.
+Directives for the Operator:
+            1. Verify ROCm gfx1100 override before first boot.
+            2. Secure Blue Iris MQTT topics immediately.
+            3. Audit the Unraid API key permissions to ensure "Least Privilege."
+System Status: ONLINE. Awaiting Input.
+Works cited
+            1. Creating Local Agent for Computer Control, https://drive.google.com/open?id=1JlFyP5Gyl3K8fzlByfzB34nsAHJDhfj42aBAu6K_RJs
+            2. Installation with ROCm - vLLM, accessed February 8, 2026, https://docs.vllm.ai/en/v0.6.5/getting_started/amd-installation.html
+            3. How to Build Your AI Agent Monitoring Stack | Galileo, accessed February 8, 2026, https://galileo.ai/blog/how-to-build-ai-agent-monitoring-stack
+            4. Building an AI Code Auditor in Rust: A Journey into Agentic Systems | by Aarambh Dev Hub, accessed February 8, 2026, https://aarambhdevhub.medium.com/building-an-ai-code-auditor-in-rust-a-journey-into-agentic-systems-cf3251d7dcbb
+            5. Open WebUI Stack Optimization.txt
+            6. vLLM V1 performance optimization - AMD ROCm documentation, accessed February 8, 2026, https://rocm.docs.amd.com/en/latest/how-to/rocm-for-ai/inference-optimization/vllm-optimization.html
+            7. new, https://drive.google.com/open?id=1BDui_hRZegag3DBfoJgWWFjlGgZP-u2pvB_Rge7IgbM
+            8. Correcting Python Syntax in Bash Script
+            9. 7900 XTX + ROCm: A Year Later. Llama.cpp vs vLLM Benchmarks (TB3 eGPU) - Reddit, accessed February 8, 2026, https://www.reddit.com/r/LocalLLaMA/comments/1q189os/7900_xtx_rocm_a_year_later_llamacpp_vs_vllm/
+            10. [Plugin] Unraid Management Agent, accessed February 8, 2026, https://forums.unraid.net/topic/196675-plugin-unraid-management-agent/
+            11. Welcome to Unraid API, accessed February 8, 2026, https://docs.unraid.net/API/
+            12. Programmatic API key management - Unraid Docs, accessed February 8, 2026, https://docs.unraid.net/API/programmatic-api-key-management/
+            13. Using the Unraid API, accessed February 8, 2026, https://docs.unraid.net/API/how-to-use-the-api/
+            14. Proxmox VE API, accessed February 8, 2026, https://pve.proxmox.com/wiki/Proxmox_VE_API
+            15. ha-blueiris/docs/blueiris-server.md at master · elad-bar/ha-blueiris - GitHub, accessed February 8, 2026, https://github.com/elad-bar/ha-blueiris/blob/master/docs/blueiris-server.md
+            16. Title: Installing Armbian on Orange Pi - A Step-by-Step Guide : r/OrangePI - Reddit, accessed February 8, 2026, https://www.reddit.com/r/OrangePI/comments/17dd0u6/title_installing_armbian_on_orange_pi_a/
+            17. wyoming-satellite/docs/tutorial_2mic.md at master - GitHub, accessed February 8, 2026, https://github.com/rhasspy/wyoming-satellite/blob/master/docs/tutorial_2mic.md
+            18. rhasspy/wyoming-satellite: Remote voice satellite using Wyoming protocol - GitHub, accessed February 8, 2026, https://github.com/rhasspy/wyoming-satellite
+            19. Filter Function: Modify Inputs and Outputs - Open WebUI, accessed February 8, 2026, https://docs.openwebui.com/features/plugin/functions/filter/
+            20. Tools | Open WebUI, accessed February 8, 2026, https://docs.openwebui.com/features/plugin/tools/
