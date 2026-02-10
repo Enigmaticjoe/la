@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    volumes:
+      - open-webui-data:/app/backend/data
+      - ./configs/functions:/app/backend/functions
+      - ./configs/pipelines:/app/backend/pipelines
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-change-me-to-random-string}
+      - ENABLE_RAG_WEB_SEARCH=true
+      - ENABLE_RAG_WEB_LOADER_SSL_VERIFICATION=false
+      - RAG_EMBEDDING_MODEL=nomic-embed-text
+      - RAG_RERANKING_MODEL=ms-marco-MiniLM-L-12-v2
+      - WEBUI_AUTH=true
+      - DEFAULT_MODELS=llama3.2:latest
+      - ENABLE_ADMIN_EXPORT=true
+      - ENABLE_COMMUNITY_SHARING=true
+      - ENABLE_OLLAMA_API=true
+      - WEBUI_LOG_LEVEL=INFO
+      - CHROMA_HTTP_HOST=chromadb
+      - CHROMA_HTTP_PORT=8000
+    restart: unless-stopped
+    depends_on:
+      - ollama
+      - chromadb
+    networks:
+      - open-webui-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_MAX_LOADED_MODELS=3
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_NUM_GPU=1
+    restart: unless-stopped
+    networks:
+      - open-webui-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - chromadb-data:/chroma/chroma
+    environment:
+      - ALLOW_RESET=true
+      - IS_PERSISTENT=true
+      - ANONYMIZED_TELEMETRY=false
+    restart: unless-stopped
+    networks:
+      - open-webui-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  pipelines:
+    image: ghcr.io/open-webui/pipelines:main
+    container_name: pipelines
+    ports:
+      - "9099:9099"
+    volumes:
+      - ./configs/pipelines:/app/pipelines
+    environment:
+      - PIPELINES_DIR=/app/pipelines
+    restart: unless-stopped
+    networks:
+      - open-webui-network
+
+volumes:
+  open-webui-data:
+    driver: local
+  ollama-data:
+    driver: local
+  chromadb-data:
+    driver: local
+
+networks:
+  open-webui-network:
+    driver: bridge
