@@ -19,6 +19,8 @@ bash scripts/automation/deploy-updated-stacks.sh
 
 ## Files
 
+### Brawn Node (Unraid 192.168.1.222) - Portainer Stacks
+
 | File | Purpose |
 |------|---------|
 | `01-core-infrastructure.yml` | Homepage, Uptime Kuma, Dozzle, Node-RED, MQTT, Glances, Watchtower, Cloudflared, SearXNG, FlareSolverr, Browserless, hass-unraid |
@@ -29,6 +31,20 @@ bash scripts/automation/deploy-updated-stacks.sh
 | `brawn-setup.sh` | Create dirs, permissions, default configs, validate |
 | `brawn-validate.sh` | Post-deploy health check for all services |
 | `brawn-maintenance.sh` | Cleanup orphans, check health, disk report |
+
+### Brain Node (Pop!_OS 192.168.1.9) - Primary AI Workloads
+
+| File | Purpose |
+|------|---------|
+| `brain-stack.yml` | vLLM (GPU), Qdrant, TEI Embeddings, SearXNG, OpenWebUI - Full RAG stack on RX 7900 XT |
+| `brain-setup.sh` | Create dirs, generate configs, validate GPU/ROCm, cleanup |
+| **`PORTAINER-DEPLOY.md`** | **Complete Portainer deployment guide for brain-stack.yml** |
+| **`BRAIN-TROUBLESHOOTING.md`** | **Quick troubleshooting reference for brain-stack issues** |
+
+### Automation & Integration
+
+| File | Purpose |
+|------|---------|
 | `scripts/automation/sync-stack-images.sh` | Sync stack files with current running images |
 | `scripts/automation/deploy-updated-stacks.sh` | Interactive deployment guide for updated stacks |
 | **`BRAIN-BRAWN-INTEGRATION.md`** | **Complete guide for Brain-Brawn ecosystem integration** |
