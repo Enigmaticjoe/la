@@ -30,6 +30,13 @@ PORTAINER_VERSION="latest"
 PORTAINER_DATA_DIR="/var/lib/portainer"
 PORTAINER_PORT="9000"
 PORTAINER_PORT_HTTPS="9443"
+MIN_DISK_SPACE_GB=10
+MIN_RAM_GB=2
+
+# State tracking for rollback
+DOCKER_INSTALLED=false
+DOCKER_STARTED=false
+PORTAINER_INSTALLED=false
 
 #############################################################################
 # Helper Functions
@@ -90,9 +97,93 @@ check_fedora_version() {
     fi
 }
 
+check_disk_space() {
+    print_step "1/4" "Checking disk space..."
+    
+    local available_gb=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
+    
+    if [[ $available_gb -lt $MIN_DISK_SPACE_GB ]]; then
+        print_error "Insufficient disk space. Available: ${available_gb}GB, Required: ${MIN_DISK_SPACE_GB}GB"
+        exit 1
+    fi
+    
+    print_success "Disk space check passed (${available_gb}GB available)"
+}
+
+check_ram() {
+    print_step "2/4" "Checking system RAM..."
+    
+    local total_ram_gb=$(free -g | awk '/^Mem:/ {print $2}')
+    
+    if [[ $total_ram_gb -lt $MIN_RAM_GB ]]; then
+        print_warning "Low RAM detected: ${total_ram_gb}GB. Recommended: ${MIN_RAM_GB}GB+"
+        print_warning "Docker and Portainer may run slowly"
+    else
+        print_success "RAM check passed (${total_ram_gb}GB available)"
+    fi
+}
+
+check_internet() {
+    print_step "3/4" "Checking internet connectivity..."
+    
+    if ping -c 1 -W 2 8.8.8.8 &>/dev/null; then
+        print_success "Internet connectivity verified"
+    else
+        print_error "No internet connection detected. This installer requires internet access."
+        exit 1
+    fi
+}
+
+check_ports() {
+    print_step "4/4" "Checking port availability..."
+    
+    local ports_in_use=()
+    
+    if ss -tln | grep -q ":${PORTAINER_PORT} "; then
+        ports_in_use+=("$PORTAINER_PORT")
+    fi
+    
+    if ss -tln | grep -q ":${PORTAINER_PORT_HTTPS} "; then
+        ports_in_use+=("$PORTAINER_PORT_HTTPS")
+    fi
+    
+    if [[ ${#ports_in_use[@]} -gt 0 ]]; then
+        print_warning "Ports already in use: ${ports_in_use[*]}"
+        print_warning "These ports will be needed for Portainer"
+        read -p "Continue anyway? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    else
+        print_success "Required ports are available"
+    fi
+}
+
 cleanup_on_error() {
-    print_error "Installation failed. Cleaning up..."
-    # Add cleanup logic here if needed
+    print_error "Installation failed. Rolling back changes..."
+    
+    # Stop and remove Portainer if it was started
+    if [[ "$PORTAINER_INSTALLED" == "true" ]]; then
+        print_warning "Removing Portainer..."
+        docker stop portainer 2>/dev/null || true
+        docker rm portainer 2>/dev/null || true
+        docker volume rm portainer_data 2>/dev/null || true
+    fi
+    
+    # Stop Docker if it was started
+    if [[ "$DOCKER_STARTED" == "true" ]]; then
+        print_warning "Stopping Docker service..."
+        systemctl stop docker 2>/dev/null || true
+    fi
+    
+    # Remove Docker if it was installed
+    if [[ "$DOCKER_INSTALLED" == "true" ]]; then
+        print_warning "Removing Docker packages..."
+        dnf remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null || true
+    fi
+    
+    print_error "Rollback completed. Please check the errors above and try again."
     exit 1
 }
 
@@ -171,6 +262,7 @@ install_docker() {
         cleanup_on_error
     }
     
+    DOCKER_INSTALLED=true
     print_success "Docker Engine installed"
 }
 
@@ -181,6 +273,8 @@ start_docker() {
         print_error "Failed to start Docker service"
         cleanup_on_error
     }
+    
+    DOCKER_STARTED=true
     
     systemctl enable docker || {
         print_warning "Failed to enable Docker service at boot"
@@ -257,6 +351,7 @@ install_portainer() {
         cleanup_on_error
     }
     
+    PORTAINER_INSTALLED=true
     print_success "Portainer container started"
     
     print_step "4/4" "Verifying Portainer installation..."
@@ -361,6 +456,13 @@ main() {
     # Pre-flight checks
     check_root
     check_fedora_version
+    
+    # System requirements check
+    print_phase "0" "Checking system requirements..."
+    check_disk_space
+    check_ram
+    check_internet
+    check_ports
     
     # Phase 1: Install Docker
     print_phase "1" "Installing Docker Engine for Fedora 43..."
