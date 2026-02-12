@@ -18,7 +18,7 @@
 #
 # CPU SERVICES (no GPU needed -- uses 128GB system RAM):
 #   Qdrant:     Vector database for RAG
-#   TEI:        Text embedding inference (CPU mode, Qwen3-Embedding-0.6B)
+#   TEI:        Text embedding inference (CPU mode, BAAI/bge-base-en-v1.5)
 #   SearXNG:    Privacy-respecting metasearch for web RAG
 #   OpenWebUI:  Chat interface with full RAG support
 #
@@ -32,7 +32,7 @@
 #
 # HEALTHCHECK TIMINGS:
 #   - vLLM: 240s start period (model loading to GPU)
-#   - TEI Embeddings: 600s start period (model download ~1.2GB + loading)
+#   - TEI Embeddings: 300s start period (model download + loading)
 #   - Qdrant: 20s start period (quick database init)
 #   - SearXNG: 15s start period (lightweight service)
 #   - OpenWebUI: 60s start period (depends on other services)
@@ -198,9 +198,9 @@ services:
   # ---------------------------------------------------------------
   # TEI Embeddings - Text Embedding Inference (CPU)
   # Runs on CPU to keep full GPU for vLLM
-  # Ultra 9 285K + 128GB RAM handles 0.6B model easily
-  # Model auto-downloads on first start (~1.2GB)
-  # Extended start_period to allow for model download (3-5 min)
+  # Ultra 9 285K + 128GB RAM handles 110M param model quickly
+  # Model auto-downloads on first start (~500MB)
+  # Start period: 300s (5 min) for model download + warmup
   # ---------------------------------------------------------------
   embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
@@ -212,11 +212,11 @@ services:
       - "8001:80"
     command:
       - --model-id
-      - Qwen/Qwen3-Embedding-0.6B
+      - BAAI/bge-base-en-v1.5
       - --port
       - "80"
       - --max-batch-tokens
-      - "16384"
+      - "8192"
     networks:
       brain_net:
         ipv4_address: 172.31.0.20
@@ -225,7 +225,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 600s
+      start_period: 300s
 
   # ---------------------------------------------------------------
   # SearXNG - Privacy-Respecting Metasearch
@@ -270,6 +270,7 @@ services:
       - RAG_EMBEDDING_ENGINE=openai
       - RAG_OPENAI_API_BASE_URL=http://172.31.0.20:80/v1
       - RAG_OPENAI_API_KEY=sk-local
+      - RAG_EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
       - ENABLE_RAG_HYBRID_SEARCH=true
       # RAG - Web search via local SearXNG
       - ENABLE_RAG_WEB_SEARCH=true
