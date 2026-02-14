@@ -1,0 +1,60 @@
+Hardware Monitoring Agent - File Manifest
+==========================================
+
+Core Application Files:
+----------------------
+✓ monitor.py              - Main Flask REST API server (458 lines)
+✓ rocm_control.py         - ROCm GPU control utilities (356 lines)
+✓ optimizer.py            - Hardware optimization engine (507 lines)
+✓ metrics.py              - Metrics collection & storage (434 lines)
+✓ __init__.py             - Package initialization (18 lines)
+
+Configuration:
+-------------
+✓ config.yaml             - Main configuration file (126 lines)
+✓ requirements.txt        - Python dependencies (7 packages)
+✓ .env.example            - Environment variable template
+
+Docker & Deployment:
+-------------------
+✓ Dockerfile              - Container build definition
+✓ docker-compose.yml      - Multi-container orchestration (58 lines)
+✓ start.sh                - Quick start script (67 lines, executable)
+
+Documentation:
+-------------
+✓ README.md               - User guide and overview (242 lines)
+✓ API.md                  - Complete API reference (427 lines)
+✓ IMPLEMENTATION.md       - Implementation summary (370+ lines)
+✓ FILES.txt               - This file manifest
+
+Testing:
+--------
+✓ test.py                 - Component test suite (209 lines)
+
+Total: 15 files, 2735+ lines of code
+Status: Complete, tested, production-ready
+
+Key Features:
+- ROCm GPU monitoring with fallback
+- REST API with 8+ endpoints
+- Prometheus metrics integration
+- Intelligent optimization recommendations
+- Background metrics collection
+- Docker deployment support
+- Comprehensive error handling
+- Well-documented codebase
+
+Quick Start:
+  ./start.sh
+
+Docker Start:
+  docker-compose up -d
+
+Test:
+  python3 test.py
+
+Access:
+  http://localhost:5000/health
+  http://localhost:5000/api/v1/metrics
+  http://localhost:5000/metrics (Prometheus)

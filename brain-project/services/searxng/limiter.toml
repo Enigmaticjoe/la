@@ -1,0 +1,22 @@
+# SearXNG Rate Limiter Configuration
+
+[botdetection.ip_limit]
+# Activate link_token method in the ip_limit method
+link_token = true
+
+# Number of requests from the same IP within window_time
+max_request = 100
+window_time = 300  # seconds (5 minutes)
+
+# Block time in seconds after exceeding limit
+block_time = 600  # 10 minutes
+
+[botdetection.http_accept]
+# Check HTTP Accept headers
+http_accept = true
+http_accept_encoding = true
+http_accept_language = true
+
+[botdetection.http_user_agent]
+# Check User-Agent header
+http_user_agent = true

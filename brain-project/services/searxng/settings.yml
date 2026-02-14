@@ -1,0 +1,158 @@
+# SearXNG Configuration for Brain AI System
+# Privacy-respecting metasearch engine
+
+general:
+  debug: false
+  instance_name: "Brain AI Search"
+  contact_url: false
+  enable_metrics: true
+
+brand:
+  new_issue_url: false
+  docs_url: false
+  public_instances: false
+  wiki_url: false
+
+search:
+  safe_search: 0  # 0=off, 1=moderate, 2=strict
+  autocomplete: "google"
+  default_lang: "en"
+  max_page: 5
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: "__REPLACE_WITH_SECRET__"  # Will be replaced by setup script
+  limiter: true
+  image_proxy: true
+  http_protocol_version: "1.1"
+  method: "POST"
+
+ui:
+  static_use_hash: true
+  default_theme: "simple"
+  default_locale: "en"
+  theme_args:
+    simple_style: "dark"
+  search_on_category_select: false
+  hotkeys: "vim"
+
+# Enabled search engines
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+    
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+    
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+    
+  - name: brave
+    engine: brave
+    shortcut: br
+    disabled: false
+    
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+    
+  - name: github
+    engine: github
+    shortcut: gh
+    disabled: false
+    
+  - name: stackoverflow
+    engine: stackoverflow
+    shortcut: so
+    disabled: false
+    
+  - name: reddit
+    engine: reddit
+    shortcut: re
+    disabled: false
+    
+  - name: youtube
+    engine: youtube
+    shortcut: yt
+    disabled: false
+    
+  - name: arxiv
+    engine: arxiv
+    shortcut: arx
+    disabled: false
+    
+  - name: wolframalpha
+    engine: wolframalpha
+    shortcut: wa
+    disabled: false
+    api_key: false  # Optional: add API key for better results
+    
+  - name: pubmed
+    engine: pubmed
+    shortcut: pub
+    disabled: false
+
+# Outgoing request settings
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 15.0
+  pool_connections: 100
+  pool_maxsize: 20
+  enable_http2: true
+
+# Enable result proxy for privacy
+result_proxy:
+  url: null
+  key: null
+
+# Disabled engines (too slow or unreliable)
+disabled_engines:
+  - wikidata
+  - currency
+  - yahoo
+  - qwant
+
+# Plugins
+enabled_plugins:
+  - 'Hash plugin'
+  - 'Self Information'
+  - 'Tracker URL remover'
+  - 'Ahmia blacklist'
+
+# DOI resolvers
+doi_resolvers:
+  doi.org: 'https://doi.org/{doi}'
+  sci-hub.se: 'https://sci-hub.se/{doi}'
+
+# Default categories
+categories_as_tabs:
+  general:
+    - google
+    - duckduckgo
+    - brave
+    - bing
+  images:
+    - google images
+    - bing images
+  videos:
+    - youtube
+    - bing videos
+  news:
+    - google news
+    - bing news
+  it:
+    - github
+    - stackoverflow
+  science:
+    - arxiv
+    - pubmed
+    - google scholar

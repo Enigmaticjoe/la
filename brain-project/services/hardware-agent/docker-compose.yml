@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  hardware-agent:
+    build: .
+    container_name: hardware-agent
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persistent metrics storage
+      - metrics-data:/app/data/metrics
+      - logs:/app/logs
+      # Optional: override config
+      - ./config.yaml:/app/config.yaml:ro
+    devices:
+      # ROCm GPU access
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    environment:
+      # Alert thresholds
+      - GPU_TEMP_THRESHOLD=${GPU_TEMP_THRESHOLD:-80}
+      - VRAM_THRESHOLD=${VRAM_THRESHOLD:-90}
+      - CPU_THRESHOLD=${CPU_THRESHOLD:-90}
+      - MEMORY_THRESHOLD=${MEMORY_THRESHOLD:-90}
+      # Server config
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+      # Monitoring
+      - METRICS_INTERVAL=${METRICS_INTERVAL:-30}
+      - METRICS_RETENTION_DAYS=${METRICS_RETENTION_DAYS:-7}
+      # ROCm
+      - ROCM_SMI_PATH=/opt/rocm/bin/rocm-smi
+      - ROCM_ENABLED=true
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    networks:
+      - monitoring
+    labels:
+      - "com.brain.service=hardware-agent"
+      - "com.brain.version=1.0.0"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  metrics-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/metrics
+  logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./logs
+
+networks:
+  monitoring:
+    driver: bridge

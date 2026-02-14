@@ -1,0 +1,48 @@
+FROM python:3.11-slim
+
+LABEL maintainer="Brain AI Stack"
+LABEL description="Self-evolution and auto-optimization container"
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements-evolution.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements-evolution.txt
+
+# Copy evolution scripts
+COPY self-evolve.py .
+COPY auto-optimize.py .
+
+# Create data directories
+RUN mkdir -p /data/evolution
+
+# Environment variables with defaults
+ENV OPENWEBUI_URL=http://openwebui:8080
+ENV VLLM_URL=http://vllm:8000
+ENV QDRANT_URL=http://qdrant:6333
+ENV EVOLUTION_DB=/data/evolution/evolution.db
+ENV EVOLUTION_LOG=/data/evolution/evolution.log
+ENV OPTIMIZATION_LOG=/data/evolution/auto-optimize.log
+ENV CHECK_INTERVAL=300
+ENV OPTIMIZE_CHECK_INTERVAL=60
+ENV MIN_SAMPLES=10
+ENV PYTHONUNBUFFERED=1
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import os; exit(0 if os.path.exists('/data/evolution/evolution.log') else 1)"
+
+# Default command: Run both self-evolve and auto-optimize
+# Using a simple approach - in production, use supervisord or similar
+CMD python -u self-evolve.py & \
+    python -u auto-optimize.py & \
+    wait

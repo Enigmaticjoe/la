@@ -1,0 +1,37 @@
+{
+  "model": {
+    "id": "nomic-ai/nomic-embed-text-v1.5",
+    "revision": "main",
+    "description": "High-quality uncensored embedding model optimized for semantic search",
+    "dimensions": 768,
+    "max_sequence_length": 8192,
+    "pooling": "mean",
+    "normalize": true
+  },
+  "serving": {
+    "port": 80,
+    "host": "0.0.0.0",
+    "max_batch_tokens": 16384,
+    "max_client_batch_size": 32,
+    "max_concurrent_requests": 512,
+    "workers": 4
+  },
+  "performance": {
+    "dtype": "float32",
+    "pooling_strategy": "mean",
+    "trust_remote_code": false,
+    "use_cpu": true,
+    "cpu_threads": 8
+  },
+  "optimization": {
+    "enable_batching": true,
+    "batch_timeout_ms": 100,
+    "cache_size": 1000,
+    "enable_prefix_caching": true
+  },
+  "monitoring": {
+    "enable_metrics": true,
+    "metrics_port": 8080,
+    "log_level": "info"
+  }
+}

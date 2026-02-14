@@ -1,0 +1,75 @@
+###############################################################################
+# vLLM Configuration for AMD Radeon RX 7900 XT (ROCm)
+# Optimized for AWQ quantized models
+###############################################################################
+
+# Model Settings
+model:
+  name: cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-AWQ
+  quantization: awq
+  dtype: half
+  trust_remote_code: true
+  max_model_len: 16384
+  
+# GPU Settings (AMD ROCm)
+gpu:
+  vendor: amd
+  memory_utilization: 0.90  # Use 90% of 20GB VRAM
+  tensor_parallel_size: 1
+  pipeline_parallel_size: 1
+  device: auto
+  
+# Performance Tuning
+performance:
+  max_num_seqs: 32
+  max_num_batched_tokens: 16384
+  max_paddings: 256
+  enable_chunked_prefill: true
+  max_num_on_the_fly: 8
+  
+# Serving Configuration
+serving:
+  host: 0.0.0.0
+  port: 8000
+  uvicorn_log_level: info
+  disable_log_requests: true
+  served_model_name: dolphin-2.9.3-llama-3.1-8b
+  
+# Tokenizer Settings
+tokenizer:
+  tokenizer_mode: auto
+  skip_tokenizer_init: false
+  
+# Generation Settings
+generation:
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  repetition_penalty: 1.1
+  max_tokens: 4096
+  
+# Tools & Function Calling
+tools:
+  enable_auto_tool_choice: true
+  tool_call_parser: hermes
+  
+# Optimization Flags (ROCm-specific)
+rocm:
+  use_aiter: true
+  use_aiter_rmsnorm: true
+  use_aiter_moe: true
+  use_triton_flash_attn: false
+  force_dev_kernarg: true
+  attention_backend: ROCM_FLASH
+  
+# Logging & Monitoring
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  max_logprobs: 20
+  
+# Health Check
+health:
+  enabled: true
+  endpoint: /health
+  interval: 30

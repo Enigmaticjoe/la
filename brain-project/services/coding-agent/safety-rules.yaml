@@ -1,0 +1,204 @@
+# Safety Rules for Code Execution Sandbox
+# These rules protect the system from malicious or dangerous code
+
+# Allowed built-in functions (whitelist approach)
+allowed_builtins:
+  - abs
+  - all
+  - any
+  - bin
+  - bool
+  - chr
+  - dict
+  - dir
+  - divmod
+  - enumerate
+  - filter
+  - float
+  - format
+  - hex
+  - int
+  - isinstance
+  - issubclass
+  - iter
+  - len
+  - list
+  - map
+  - max
+  - min
+  - oct
+  - ord
+  - pow
+  - range
+  - repr
+  - reversed
+  - round
+  - set
+  - slice
+  - sorted
+  - str
+  - sum
+  - tuple
+  - type
+  - zip
+  - print
+
+# Blocked modules (cannot be imported)
+blocked_modules:
+  - os
+  - sys
+  - subprocess
+  - socket
+  - urllib
+  - urllib2
+  - urllib3
+  - http
+  - httplib
+  - ftplib
+  - smtplib
+  - telnetlib
+  - pickle
+  - shelve
+  - importlib
+  - __builtin__
+  - __builtins__
+  - ctypes
+  - multiprocessing
+  - threading
+  - _thread
+  - asyncio
+  - pty
+  - fcntl
+  - mmap
+  - resource
+  - signal
+  - gc
+  - code
+  - codeop
+  - compile
+
+# Blocked attributes and functions
+blocked_attributes:
+  - __import__
+  - exec
+  - eval
+  - compile
+  - open
+  - file
+  - input
+  - raw_input
+  - __builtins__
+  - __globals__
+  - __locals__
+  - __dict__
+  - __class__
+  - __bases__
+  - __subclasses__
+  - __init__
+  - __new__
+
+# Resource limits
+resource_limits:
+  # Maximum execution time in seconds
+  max_execution_time: 300
+  
+  # Maximum memory in MB
+  max_memory_mb: 2048
+  
+  # Maximum output size in characters
+  max_output_size: 100000
+  
+  # Maximum file operations (if allowed)
+  max_file_operations: 0
+
+# Network access
+network:
+  # Allow network requests (for specific approved modules)
+  enabled: false
+  
+  # Allowed domains (if network enabled)
+  allowed_domains: []
+
+# File system access
+filesystem:
+  # Allow file read operations
+  read_enabled: false
+  
+  # Allow file write operations
+  write_enabled: false
+  
+  # Allowed directories (if filesystem access enabled)
+  allowed_paths: []
+
+# Code patterns to block (regex patterns)
+blocked_patterns:
+  - "exec\\s*\\("
+  - "eval\\s*\\("
+  - "__import__\\s*\\("
+  - "compile\\s*\\("
+  - "open\\s*\\("
+  - "os\\.system"
+  - "subprocess\\."
+  - "socket\\."
+
+# Warnings to issue (but don't block)
+warning_patterns:
+  - "while\\s+True:"  # Infinite loops
+  - "for\\s+.*\\s+in\\s+range\\s*\\(\\s*\\d{7,}"  # Very large ranges
+
+# Safe module configurations
+safe_modules:
+  numpy:
+    enabled: true
+    restricted: false
+  
+  pandas:
+    enabled: true
+    restricted: false
+  
+  matplotlib:
+    enabled: true
+    restricted: false
+    pyplot:
+      allow_show: false  # Don't open GUI windows
+  
+  requests:
+    enabled: false  # Disabled by default for security
+    restricted: true
+  
+  json:
+    enabled: true
+    restricted: false
+  
+  math:
+    enabled: true
+    restricted: false
+  
+  datetime:
+    enabled: true
+    restricted: false
+
+# Logging
+logging:
+  # Log all execution attempts
+  log_executions: true
+  
+  # Log code content (for audit trail)
+  log_code: true
+  
+  # Log results
+  log_results: true
+  
+  # Log safety violations
+  log_violations: true
+
+# Rate limiting
+rate_limiting:
+  # Enable rate limiting
+  enabled: true
+  
+  # Maximum executions per minute per IP
+  max_per_minute: 60
+  
+  # Maximum executions per hour per IP
+  max_per_hour: 1000

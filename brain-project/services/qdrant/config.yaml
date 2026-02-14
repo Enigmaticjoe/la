@@ -1,0 +1,86 @@
+# Qdrant Vector Database Configuration
+# Optimized for RAG memory system
+
+service:
+  # HTTP API endpoint
+  http_port: 6333
+  
+  # gRPC API endpoint (optional, for better performance)
+  grpc_port: 6334
+  
+  # Host to bind
+  host: 0.0.0.0
+
+# Storage configuration
+storage:
+  # Storage path
+  storage_path: /qdrant/storage
+  
+  # Snapshot path
+  snapshots_path: /qdrant/snapshots
+  
+  # Performance optimizations
+  optimizers:
+    # Number of optimizers to run in parallel
+    indexing_threshold_kb: 10000
+    
+    # Flush to disk interval
+    flush_interval_sec: 5
+    
+    # Max segment size before splitting
+    max_segment_size_kb: 200000
+  
+  # WAL (Write-Ahead Log) configuration
+  wal:
+    wal_capacity_mb: 32
+    wal_segments_ahead: 2
+
+# Collection defaults
+collections:
+  # Default vector size (will be overridden per collection)
+  default_vector_size: 768
+  
+  # Default distance metric
+  default_distance: Cosine
+  
+  # HNSW index parameters (for fast similarity search)
+  hnsw_config:
+    m: 16  # Number of edges per node (higher = better recall, more memory)
+    ef_construct: 100  # Construction time search depth (higher = better quality, slower build)
+    full_scan_threshold: 10000  # Use brute force for collections smaller than this
+  
+  # Quantization for memory efficiency (optional)
+  quantization_config:
+    scalar:
+      type: int8
+      quantile: 0.99
+      always_ram: true
+
+# Performance tuning
+performance:
+  # Max number of search results to return
+  max_search_limit: 100
+  
+  # Default number of search results
+  default_search_limit: 10
+  
+  # Timeout for search operations (seconds)
+  timeout_sec: 30
+
+# Logging
+log_level: INFO
+
+# Telemetry (disabled for privacy)
+telemetry_disabled: true
+
+# Security
+# Note: API key should be set via environment variable QDRANT_API_KEY
+# or through docker-compose environment section
+
+# Cluster configuration (for future scaling)
+cluster:
+  enabled: false
+  # p2p:
+  #   port: 6335
+  # consensus:
+  #   tick_period_ms: 100
