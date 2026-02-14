@@ -38,6 +38,9 @@ bash scripts/automation/deploy-updated-stacks.sh
 |------|---------|
 | `brain-stack.yml` | vLLM (GPU), Qdrant, TEI Embeddings, SearXNG, OpenWebUI - Full RAG stack on RX 7900 XT |
 | `brain-setup.sh` | Create dirs, generate configs, validate GPU/ROCm, cleanup |
+| `brain-model-downloader.sh` | Download AI models optimized for AMD GPU with proper huggingface-cli commands |
+| `brain-requirements.txt` | Python dependencies for AMD ROCm environment |
+| **`BRAIN-AMD-SETUP.md`** | **Complete AMD ROCm setup and optimization guide for RX 7900 XT** |
 | **`PORTAINER-DEPLOY.md`** | **Complete Portainer deployment guide for brain-stack.yml** |
 | **`BRAIN-TROUBLESHOOTING.md`** | **Quick troubleshooting reference for brain-stack issues** |
 
@@ -52,6 +55,8 @@ bash scripts/automation/deploy-updated-stacks.sh
 ---
 
 ## Quick Start
+
+### Brawn Node (Unraid)
 
 ```bash
 # 1. Copy everything to Brawn
@@ -77,6 +82,29 @@ nano /mnt/user/appdata/zurg/config/config.yml
 
 # 6. Validate
 bash brawn-validate.sh
+```
+
+### Brain Node (Pop!_OS - AMD RX 7900 XT)
+
+```bash
+# 1. Install ROCm (if not already installed)
+# Follow detailed instructions in BRAIN-AMD-SETUP.md
+
+# 2. Run system setup
+bash brain-setup.sh
+
+# 3. Download AI models for AMD GPU
+bash brain-model-downloader.sh
+
+# 4. Deploy the brain stack
+docker compose -f brain-stack.yml up -d
+
+# 5. Verify services
+curl http://localhost:8000/v1/models       # vLLM
+curl http://localhost:6333/healthz          # Qdrant
+curl http://localhost:3000                  # OpenWebUI
+
+# See BRAIN-AMD-SETUP.md for complete setup guide
 ```
 
 ---

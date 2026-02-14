@@ -309,7 +309,7 @@ section "NEXT STEPS"
 
 echo ""
 echo "  1. Download a model (if not cached):"
-echo "     huggingface-cli download cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-AWQ"
+echo "     huggingface-cli download cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-AWQ --local-dir /home/brains/ai-models/models--cognitivecomputations--dolphin-2.9.3-llama-3.1-8b-AWQ"
 echo ""
 echo "  2. Deploy the full stack:"
 echo "     docker compose -f brain-stack.yml up -d"
