@@ -1,0 +1,110 @@
+# Self-Evolution Docker Compose Integration
+# Add this to your existing brain-project/docker-compose.yml
+
+services:
+  # Self-Evolution Engine
+  evolution:
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile.evolution
+    container_name: brain-evolution
+    restart: unless-stopped
+    volumes:
+      - ./data/evolution:/data/evolution:rw
+      - ./data/openwebui:/data/openwebui:ro  # Read-only access to OpenWebUI data
+      - ./data/qdrant:/data/qdrant:ro        # Read-only access to Qdrant data
+    environment:
+      # Service URLs
+      OPENWEBUI_URL: http://openwebui:8080
+      OPENWEBUI_API_KEY: ${OPENWEBUI_API_KEY:-}
+      VLLM_URL: http://vllm:8000
+      QDRANT_URL: http://qdrant:6333
+      
+      # Evolution settings
+      CHECK_INTERVAL: 300                     # Check every 5 minutes
+      MIN_SAMPLES: 10                         # Minimum samples before optimization
+      
+      # Auto-optimization settings
+      OPTIMIZE_CHECK_INTERVAL: 60             # Check every 1 minute
+      
+      # GPU monitoring (if nvidia-smi available)
+      NVIDIA_SMI_PATH: /usr/bin/nvidia-smi
+      
+      # Logging
+      EVOLUTION_DB: /data/evolution/evolution.db
+      EVOLUTION_LOG: /data/evolution/evolution.log
+      OPTIMIZATION_LOG: /data/evolution/auto-optimize.log
+      PYTHONUNBUFFERED: 1
+    
+    networks:
+      - brain-network
+    
+    depends_on:
+      - openwebui
+      - vllm
+      - qdrant
+    
+    # Optional: GPU access for nvidia-smi monitoring
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; exit(0 if os.path.exists('/data/evolution/evolution.log') else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    labels:
+      - "brain.component=evolution"
+      - "brain.description=Self-evolution and auto-optimization engine"
+
+  # Backup Service (run manually or via cron)
+  backup:
+    image: alpine:latest
+    container_name: brain-backup
+    restart: "no"  # Don't auto-restart, run manually
+    
+    volumes:
+      - ./scripts/backup.sh:/backup.sh:ro
+      - ./data:/data:ro                       # Read-only access to all data
+      - ./backups:/data/backups:rw            # Write access for backups
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      - ./.env:/app/.env:ro
+    
+    environment:
+      BACKUP_DIR: /data/backups
+      RETENTION_DAYS: 30
+      RETENTION_COUNT: 10
+      QDRANT_URL: http://qdrant:6333
+      OPENWEBUI_DATA: /data/openwebui
+      EVOLUTION_DATA: /data/evolution
+    
+    networks:
+      - brain-network
+    
+    command: /bin/sh /backup.sh
+    
+    labels:
+      - "brain.component=backup"
+      - "brain.description=Automated backup system"
+
+# Create the network if not exists
+networks:
+  brain-network:
+    name: brain-network
+    driver: bridge
+
+# Ensure backup directory exists
+volumes:
+  backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./backups

@@ -1,0 +1,169 @@
+# Hardware Monitoring Agent Configuration
+
+# Monitoring settings
+monitoring:
+  # Collection interval in seconds
+  interval: 30
+  
+  # Directory to store metrics data
+  data_dir: /app/data/metrics
+  
+  # Enable/disable specific monitors
+  enable_gpu: true
+  enable_cpu: true
+  enable_memory: true
+
+# Alert thresholds
+alerts:
+  # GPU temperature threshold in Celsius
+  gpu_temp_threshold: 80
+  
+  # VRAM usage threshold in percentage
+  vram_usage_threshold: 90
+  
+  # CPU usage threshold in percentage
+  cpu_usage_threshold: 90
+  
+  # Memory usage threshold in percentage
+  memory_usage_threshold: 90
+  
+  # Enable alert notifications
+  enable_notifications: true
+  
+  # Alert cooldown period in seconds (prevent spam)
+  cooldown_seconds: 300
+
+# Metrics retention and storage
+metrics:
+  # Number of days to retain metrics data
+  retention_days: 7
+  
+  # Aggregation intervals in seconds
+  # Used for downsampling old data
+  aggregation_intervals:
+    - 300    # 5 minutes
+    - 3600   # 1 hour
+    - 86400  # 1 day
+  
+  # Compress old metrics files
+  compress_after_days: 1
+  
+  # Maximum storage size in GB (cleanup if exceeded)
+  max_storage_gb: 10
+
+# ROCm configuration
+rocm:
+  # Path to rocm-smi executable
+  smi_path: /opt/rocm/bin/rocm-smi
+  
+  # Enable ROCm monitoring
+  enabled: true
+  
+  # Fallback to psutil if ROCm unavailable
+  fallback_to_psutil: true
+  
+  # ROCm command timeout in seconds
+  command_timeout: 10
+
+# Optimizer settings
+optimizer:
+  # Analysis window in minutes
+  analysis_window_minutes: 30
+  
+  # Thresholds for recommendations
+  thresholds:
+    # Temperature thresholds in Celsius
+    gpu_temp_warning: 75
+    gpu_temp_critical: 85
+    gpu_temp_throttle: 90
+    
+    # VRAM usage thresholds in percentage
+    vram_low: 20
+    vram_high: 85
+    vram_critical: 95
+    
+    # CPU usage threshold in percentage
+    cpu_high: 80
+    
+    # Memory usage threshold in percentage
+    memory_high: 85
+    
+    # GPU utilization thresholds in percentage
+    utilization_low: 30
+    utilization_optimal: 70
+    utilization_high: 95
+  
+  # Enable automatic optimization suggestions
+  auto_suggest: true
+  
+  # Minimum data points required for analysis
+  min_data_points: 10
+
+# Flask server configuration
+server:
+  # Host to bind to (0.0.0.0 for all interfaces)
+  host: 0.0.0.0
+  
+  # Port to listen on
+  port: 5000
+  
+  # Enable debug mode (development only)
+  debug: false
+  
+  # Number of worker threads
+  threaded: true
+  
+  # Request timeout in seconds
+  timeout: 30
+
+# Prometheus metrics
+prometheus:
+  # Enable Prometheus metrics endpoint
+  enabled: true
+  
+  # Metrics endpoint path
+  endpoint: /metrics
+  
+  # Include detailed labels
+  detailed_labels: true
+
+# Logging configuration
+logging:
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: INFO
+  
+  # Log format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Log to file
+  log_file: /app/logs/hardware-agent.log
+  
+  # Rotate logs
+  rotate_logs: true
+  max_log_size_mb: 100
+  backup_count: 5
+
+# Performance tuning
+performance:
+  # Cache recommendations for N seconds
+  recommendation_cache_seconds: 60
+  
+  # Maximum concurrent metric queries
+  max_concurrent_queries: 10
+  
+  # Background cleanup interval in seconds
+  cleanup_interval: 3600
+
+# Feature flags
+features:
+  # Enable experimental features
+  experimental: false
+  
+  # Enable GPU fan control
+  enable_fan_control: false
+  
+  # Enable GPU power control
+  enable_power_control: false
+  
+  # Enable automatic thermal management
+  auto_thermal_management: false
