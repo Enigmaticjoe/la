@@ -41,6 +41,8 @@ bash scripts/automation/deploy-updated-stacks.sh
 | `brain-model-downloader.sh` | Download AI models optimized for AMD GPU with proper huggingface-cli commands |
 | `brain-requirements.txt` | Python dependencies for AMD ROCm environment |
 | **`BRAIN-AMD-SETUP.md`** | **Complete AMD ROCm setup and optimization guide for RX 7900 XT** |
+| **`UBUNTU-24.04-SUPPORT.md`** | **Ubuntu 24.04 specific ROCm installation and troubleshooting** |
+| **`validate-rocm-ubuntu24.sh`** | **Validation script to verify ROCm installation on Ubuntu 24.04/22.04** |
 | **`PORTAINER-DEPLOY.md`** | **Complete Portainer deployment guide for brain-stack.yml** |
 | **`BRAIN-TROUBLESHOOTING.md`** | **Quick troubleshooting reference for brain-stack issues** |
 
@@ -89,17 +91,21 @@ bash brawn-validate.sh
 ```bash
 # 1. Install ROCm (if not already installed)
 # Follow detailed instructions in BRAIN-AMD-SETUP.md
+# For Ubuntu 24.04, see UBUNTU-24.04-SUPPORT.md
 
-# 2. Run system setup
+# 2. Validate ROCm installation (optional but recommended)
+bash validate-rocm-ubuntu24.sh
+
+# 3. Run system setup
 bash brain-setup.sh
 
-# 3. Download AI models for AMD GPU
+# 4. Download AI models for AMD GPU
 bash brain-model-downloader.sh
 
-# 4. Deploy the brain stack
+# 5. Deploy the brain stack
 docker compose -f brain-stack.yml up -d
 
-# 5. Verify services
+# 6. Verify services
 curl http://localhost:8000/v1/models       # vLLM
 curl http://localhost:6333/healthz          # Qdrant
 curl http://localhost:3000                  # OpenWebUI
