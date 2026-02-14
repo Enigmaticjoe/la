@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+# Project Chimera Install Wizard
+# This script installs and configures a complete AI command center on Pop!_OS or Ubuntu-based systems.
+# It prompts for user input and customises the installation based on your answers.
+
+set -euo pipefail
+
+# Ensure script runs as root (sudo)
+if [[ "$EUID" -ne 0 ]]; then
+  echo "\033[31mPlease run this installer with sudo or as root.\033[0m"
+  exit 1
+fi
+
+# Welcome message
+cat <<'BANNER'
+
+=======================
+  Project Chimera 1.0
+  Install Wizard
+=======================
+
+This wizard will set up your workstation as the command center for your AI brain, brawn and edge nodes.
+It will install development tools, Docker, Portainer, AI services and optionally torrent/VPN and a hacking assistant.
+
+BANNER
+
+# Prompt for user-specific settings
+read -p "Enter your Linux username (used for group memberships): " USERNAME
+if [[ -z "$USERNAME" ]]; then
+  echo "Username cannot be blank. Aborting."
+  exit 1
+fi
+
+read -p "Enter your Mullvad account ID (leave empty to skip torrent/VPN setup): " MULLVAD_ID
+
+read -p "List the LLM models to pull from Ollama (comma separated) [llama3,mistral]: " MODELS
+MODELS=${MODELS:-"llama3,mistral"}
+
+read -p "Enable unfiltered / uncensored models? These models may produce unfiltered content. (y/N): " UNFILTERED
+UNFILTERED=${UNFILTERED:-N}
+
+read -p "Enable Kali GPT cyber assistant? (Y/n): " KALI
+KALI=${KALI:-Y}
+
+# Update and install base packages
+apt update
+apt -y full-upgrade
+apt install -y git gh build-essential curl wget unzip neofetch htop btop tmux nmap jq ripgrep fd-find \
+    flameshot gnome-tweaks gnome-shell-extensions zsh fonts-powerline unzip python3-venv \
+    libvulkan-dev libvulkan1 vulkan-utils mesa-vulkan-drivers mesa-opencl-icd ocl-icd-opencl-dev \
+    intel-media-va-driver-non-free
+
+# Switch default shell to zsh for the specified user
+if command -v zsh >/dev/null 2>&1; then
+  usermod --shell $(which zsh) "$USERNAME"
+fi
+
+# Install Oh My Zsh and powerlevel10k theme for the user
+sudo -u "$USERNAME" sh -c "export RUNZSH=no; export CHSH=no; \ 
+  curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh"
+
+sudo -u "$USERNAME" bash -c "ZSH_CUSTOM=\"${ZSH_CUSTOM:-/home/$USERNAME/.oh-my-zsh/custom}\" && \
+  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git \"$ZSH_CUSTOM/themes/powerlevel10k\" || true && \
+  sed -i 's/^ZSH_THEME=.*/ZSH_THEME=\"powerlevel10k\/powerlevel10k\"/' /home/$USERNAME/.zshrc && \
+  sed -i 's/^plugins=.*/plugins=(git docker kubectl z history)/' /home/$USERNAME/.zshrc"
+
+# Install Docker and docker-compose plugin
+if ! command -v docker >/dev/null 2>&1; then
+  curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+  sh /tmp/get-docker.sh
+  rm /tmp/get-docker.sh
+fi
+
+# Add user to docker group
+usermod -aG docker "$USERNAME"
+
+# Pull Portainer and set up persistent data
+PORTAINER_DATA=/opt/portainer_data
+mkdir -p "$PORTAINER_DATA"
+docker volume create portainer_data || true
+docker run -d \
+  --name portainer \
+  --restart=always \
+  -p 8000:8000 -p 9443:9443 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v portainer_data:/data \
+  portainer/portainer-ce:latest
+
+# Create an external Docker network
+if ! docker network ls | grep -q chimera-net; then
+  docker network create chimera-net
+fi
+
+# Deploy the AI brain using Intel Arc optimized image
+cat >/tmp/chimera_brain.yaml <<"YAML"
+version: "3.8"
+services:
+  chimera_brain:
+    image: intelanalytics/ipex-llm-inference-cpp-xpu:latest
+    container_name: chimera_brain
+    restart: unless-stopped
+    networks:
+      - chimera-net
+    ports:
+      - "11434:11434"
+    environment:
+      DEVICE: "Arc"
+      OLLAMA_INTEL_GPU: "true"
+      OLLAMA_NUM_GPU: "999"
+      ZES_ENABLE_SYSMAN: "1"
+      ONEAPI_DEVICE_SELECTOR: "level_zero:0"
+      ${UNFILTERED^^} == Y && echo "ALLOW_UNSAFE_MODELS=true" || true
+    shm_size: "16gb"
+    volumes:
+      - /home/$USERNAME/.ollama/models:/root/.ollama/models
+      - /dev/dri:/dev/dri
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -s http://localhost:11434/api/tags || exit 1"]
+      interval: 1m
+      retries: 3
+networks:
+  chimera-net:
+    external: true
+YAML
+
+docker compose -f /tmp/chimera_brain.yaml up -d
+
+# Pull requested models
+IFS=',' read -ra MODEL_ARRAY <<< "$MODELS"
+for model in "${MODEL_ARRAY[@]}"; do
+  echo "Pulling model $model..."
+  curl -X POST http://localhost:11434/api/pull -d "{\"name\": \"$model\"}" || true
+  sleep 2
+done
+
+# Deploy Open WebUI
+cat >/tmp/chimera_face.yaml <<"YAML"
+version: "3.8"
+services:
+  chimera_face:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: chimera_face
+    restart: unless-stopped
+    networks:
+      - chimera-net
+    ports:
+      - "11435:3000"
+    environment:
+      OLLAMA_BASE_URL: "http://chimera_brain:11434"
+      WEBUI_AUTH: "disabled"
+      SECRET_KEY: "$(openssl rand -hex 16)"
+    volumes:
+      - openwebui_data:/app/data
+networks:
+  chimera-net:
+    external: true
+volumes:
+  openwebui_data:
+YAML
+
+docker compose -f /tmp/chimera_face.yaml up -d
+
+# Deploy SearXNG for private search
+cat >/tmp/chimera_search.yaml <<"YAML"
+version: "3.8"
+services:
+  chimera_search:
+    image: searxng/searxng:latest
+    container_name: chimera_search
+    restart: unless-stopped
+    networks:
+      - chimera-net
+    ports:
+      - "8080:8080"
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+      - SEARXNG_SECRET_KEY=changeme
+networks:
+  chimera-net:
+    external: true
+YAML
+
+docker compose -f /tmp/chimera_search.yaml up -d
+
+# Deploy optional torrent/VPN container if Mullvad ID provided
+if [[ -n "$MULLVAD_ID" ]]; then
+  cat >/tmp/qbittorrent_vpn.yaml <<EOF2
+version: "3"
+services:
+  qbittorrent:
+    image: binhex/arch-qbittorrentvpn
+    container_name: qbittorrentvpn
+    cap_add:
+      - NET_ADMIN
+    network_mode: bridge
+    ports:
+      - "6881:6881"/tcp
+      - "6881:6881"/udp
+      - "8112:8112"
+    environment:
+      - VPN_ENABLED=yes
+      - VPN_USER=$MULLVAD_ID
+      - VPN_PASS=x  # not used for Mullvad
+      - VPN_PROV=MULLVAD
+      - VPN_PROTOCOL=wireguard
+      - LAN_NETWORK=192.168.1.0/24
+      - NAME_SERVERS=103.86.96.100,103.86.99.100
+      - STRICT_PORT_FORWARD=yes
+      - PUID=$(id -u "$USERNAME")
+      - PGID=$(id -g "$USERNAME")
+    volumes:
+      - /home/$USERNAME/qbittorrent/config:/config
+      - /home/$USERNAME/qbittorrent/downloads:/downloads
+    restart: unless-stopped
+EOF2
+  docker compose -f /tmp/qbittorrent_vpn.yaml up -d
+fi
+
+# Deploy optional Kali GPT preset alias if enabled
+if [[ ${KALI^^} == Y ]]; then
+  echo "Kali GPT assistant will be available through the Open WebUI with preset 'kali-gpt'."
+fi
+
+# Install Tailscale for overlay networking
+tailscale_installed=false
+if ! command -v tailscale >/dev/null 2>&1; then
+  curl -fsSL https://tailscale.com/install.sh | sh
+  tailscale_installed=true
+fi
+
+# Final instructions
+cat <<'EOF_MSG'
+
+Installation complete!
+
+Access points:
+- Portainer: https://localhost:9443 (username: admin; set password on first launch)
+- Brain (LLM API): http://localhost:11434
+- Face (WebUI): http://localhost:11435
+- Search: http://localhost:8080
+- Torrent (if enabled): http://localhost:8112
+- Grafana/Prometheus: http://localhost:3001 (if you install later)
+
+To start using the Kali GPT assistant, open the Open WebUI and select the kali-gpt preset. Remember, unfiltered models may produce offensive or unsafe content—use them responsibly.
+EOF_MSG
+

@@ -1,0 +1,741 @@
+# ============================================================
+# PROJECT CHIMERA: DIGITAL RENEGADE - PORTAINER STACK
+# Ubuntu Server 25.10 "Questing Quokka" @ 192.168.1.9 (Brain)
+# Unraid @ 192.168.1.222 (Brawn)
+# ============================================================
+# Deploy via Portainer Stacks
+# Philosophy: Digital Sovereignty, Unfiltered Intelligence, Punk Rock Ethos
+# ============================================================
+
+version: '3.8'
+
+networks:
+  chimera_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1
+
+volumes:
+  ollama_models:
+    driver: local
+  qdrant_data:
+    driver: local
+  openwebui_data:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  whisper_models:
+    driver: local
+  piper_voices:
+    driver: local
+
+services:
+  # ============================================================
+  # NEURAL CORE: Ollama - Multi-Model LLM Engine
+  # Hosts: Uncensored chat, Vision, Code, Embedding models
+  # ============================================================
+  chimera_brain:
+    image: ollama/ollama:latest
+    container_name: chimera_brain
+    hostname: chimera_brain
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+      - /mnt/brain_memory/models:/models  # Unraid overflow storage
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_KEEP_ALIVE=10m
+      - OLLAMA_MAX_LOADED_MODELS=4
+      - OLLAMA_NUM_PARALLEL=3
+      - OLLAMA_DEBUG=false
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']  # RTX 4070
+              capabilities: [gpu]
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ============================================================
+  # PERSONALITY ENGINE: Open WebUI with Renegade Persona
+  # Primary interface with custom prompts and theming
+  # ============================================================
+  chimera_face:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: chimera_face
+    hostname: chimera_face
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+      - ./config/renegade_prompts:/app/backend/data/prompts
+      - ./config/cyberpunk_theme:/app/backend/data/themes
+      - /mnt/brain_memory/documents:/app/backend/data/docs
+    environment:
+      - OLLAMA_BASE_URL=http://chimera_brain:11434
+      - WEBUI_AUTH=false
+      - WEBUI_NAME=JARVIS: Digital Renegade
+      - DEFAULT_USER_ROLE=admin
+      - ENABLE_SIGNUP=false
+      - ENABLE_RAG_WEB_SEARCH=true
+      - RAG_WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://chimera_search:8080/search?q=<query>&format=json
+      - ENABLE_IMAGE_GENERATION=true
+      - IMAGE_GENERATION_ENGINE=comfyui
+      - COMFYUI_BASE_URL=http://chimera_artist:8188
+      - ENABLE_RAG_LOCAL_WEB_FETCH=true
+      - ENABLE_COMMUNITY_SHARING=false
+      - ENABLE_MESSAGE_RATING=false
+      - WEBUI_BANNERS=[{"id":"renegade","content":"🔥 DIGITAL RENEGADE MODE ACTIVE - Uncensored AI - Digital Sovereignty Enabled","dismissible":false}]
+      - TASK_MODEL=llama3.2
+      - TITLE_GENERATION_PROMPT_TEMPLATE="Generate a short, punk-rock style title for this conversation. Be edgy, be real."
+    depends_on:
+      chimera_brain:
+        condition: service_healthy
+      chimera_memory:
+        condition: service_healthy
+      chimera_postgres:
+        condition: service_healthy
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.12
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ============================================================
+  # LONG-TERM MEMORY: Qdrant Vector Database
+  # Semantic memory for RAG and knowledge retrieval
+  # ============================================================
+  chimera_memory:
+    image: qdrant/qdrant:latest
+    container_name: chimera_memory
+    hostname: chimera_memory
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - /mnt/brain_memory/qdrant_backup:/qdrant/snapshots
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__LOG_LEVEL=INFO
+      - QDRANT__STORAGE__PERFORMANCE__OPTIMIZERS_ENABLED=true
+      - QDRANT__STORAGE__WAL__WAL_CAPACITY_MB=256
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.11
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================
+  # STRUCTURED MEMORY: PostgreSQL Database
+  # Conversation history, user profiles, operational logs
+  # ============================================================
+  chimera_postgres:
+    image: postgres:16-alpine
+    container_name: chimera_postgres
+    hostname: chimera_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /mnt/brain_memory/postgres_backup:/backup
+      - ./config/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      - POSTGRES_DB=renegade
+      - POSTGRES_USER=jarvis
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-digital_renegade_2025}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.19
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jarvis -d renegade"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # CACHE & MESSAGE QUEUE: Redis
+  # High-speed caching for embeddings and inter-service messaging
+  # ============================================================
+  chimera_redis:
+    image: redis:7-alpine
+    container_name: chimera_redis
+    hostname: chimera_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 8gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.20
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # VOICE INPUT: Whisper STT (Speech-to-Text)
+  # GPU-accelerated transcription for voice commands
+  # ============================================================
+  chimera_ears:
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    container_name: chimera_ears
+    hostname: chimera_ears
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      - whisper_models:/root/.cache/whisper
+    environment:
+      - ASR_MODEL=medium
+      - ASR_ENGINE=openai_whisper
+      - ASR_MODEL_PATH=/root/.cache/whisper
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.27
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ============================================================
+  # VOICE OUTPUT: Piper TTS (Text-to-Speech)
+  # High-quality neural TTS with punk attitude voices
+  # ============================================================
+  chimera_voice:
+    image: rhasspy/wyoming-piper:latest
+    container_name: chimera_voice
+    hostname: chimera_voice
+    restart: unless-stopped
+    ports:
+      - "10200:10200"
+    volumes:
+      - piper_voices:/data
+    command: --voice en_US-lessac-medium
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.14
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "10200"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================
+  # VISION: LLaVA Multimodal Model Server
+  # Camera feed analysis, image understanding
+  # ============================================================
+  chimera_eyes:
+    image: ollama/ollama:latest
+    container_name: chimera_eyes
+    hostname: chimera_eyes
+    restart: unless-stopped
+    ports:
+      - "11435:11434"
+    volumes:
+      - ./config/vision_models:/root/.ollama
+      - /mnt/brain_memory/camera_analysis:/analysis
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_KEEP_ALIVE=5m
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.30
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ============================================================
+  # IMAGE GENERATION: ComfyUI
+  # Stable Diffusion interface for AI art generation
+  # ============================================================
+  chimera_artist:
+    image: yanwk/comfyui-boot:latest
+    container_name: chimera_artist
+    hostname: chimera_artist
+    restart: unless-stopped
+    ports:
+      - "8188:8188"
+    volumes:
+      - ./config/comfyui/models:/home/runner/ComfyUI/models
+      - /mnt/brain_memory/generated_images:/home/runner/ComfyUI/output
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CLI_ARGS=--listen 0.0.0.0 --port 8188 --preview-method auto
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.15
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8188/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+
+  # ============================================================
+  # PRIVACY SEARCH: SearXNG
+  # Metasearch engine for web queries
+  # ============================================================
+  chimera_search:
+    image: searxng/searxng:latest
+    container_name: chimera_search
+    hostname: chimera_search
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./config/searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://192.168.1.9:8081
+      - INSTANCE_NAME=Renegade Search
+      - AUTOCOMPLETE=google
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.13
+
+  # ============================================================
+  # HOME ASSISTANT BRIDGE: MCP Server
+  # Model Context Protocol bridge to Home Assistant
+  # ============================================================
+  chimera_ha_bridge:
+    build:
+      context: ./agents/ha_bridge
+      dockerfile: Dockerfile
+    container_name: chimera_ha_bridge
+    hostname: chimera_ha_bridge
+    restart: unless-stopped
+    ports:
+      - "6971:6971"
+    volumes:
+      - ./config/ha_bridge:/config:ro
+    environment:
+      - HA_URL=http://192.168.1.149:8123
+      - HA_TOKEN=${HA_TOKEN}
+      - MCP_PORT=6971
+      - LOG_LEVEL=INFO
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.40
+    extra_hosts:
+      - "homeassistant:192.168.1.149"
+
+  # ============================================================
+  # BLUE IRIS SENTRY: Camera Analysis Bridge
+  # Connects AI vision to Blue Iris NVR
+  # ============================================================
+  chimera_sentry:
+    build:
+      context: ./agents/sentry
+      dockerfile: Dockerfile
+    container_name: chimera_sentry
+    hostname: chimera_sentry
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - /mnt/brain_memory/camera_alerts:/alerts
+      - ./config/sentry:/config:ro
+    environment:
+      - BLUEIRIS_URL=http://192.168.1.232:81
+      - BLUEIRIS_USER=${BLUEIRIS_USER}
+      - BLUEIRIS_PASS=${BLUEIRIS_PASS}
+      - VISION_API=http://chimera_eyes:11434
+      - VISION_MODEL=llava:13b
+      - ALERT_THRESHOLD=0.75
+      - LOG_LEVEL=INFO
+    depends_on:
+      - chimera_eyes
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.41
+    extra_hosts:
+      - "blueiris:192.168.1.232"
+
+  # ============================================================
+  # OPENRGB MOOD CONTROLLER: Visual Status Indicator
+  # Controls RGB lighting based on AI state
+  # ============================================================
+  chimera_rgb_controller:
+    build:
+      context: ./agents/rgb_controller
+      dockerfile: Dockerfile
+    container_name: chimera_rgb_controller
+    hostname: chimera_rgb_controller
+    restart: unless-stopped
+    ports:
+      - "8091:8091"
+    environment:
+      - OPENRGB_HOST=192.168.1.9
+      - OPENRGB_PORT=6742
+      - MCP_PORT=8091
+    network_mode: host  # Need host network for OpenRGB SDK access
+    extra_hosts:
+      - "brain:192.168.1.9"
+
+  # ============================================================
+  # UNRAID MCP SERVER: Infrastructure Control Bridge
+  # Enables AI to manage Unraid containers and storage
+  # ============================================================
+  chimera_unraid_mcp:
+    build:
+      context: ./agents/unraid_mcp
+      dockerfile: Dockerfile
+    container_name: chimera_unraid_mcp
+    hostname: chimera_unraid_mcp
+    restart: unless-stopped
+    ports:
+      - "6970:6970"
+    volumes:
+      - ./config/unraid_mcp:/config:ro
+    environment:
+      - UNRAID_URL=http://192.168.1.222
+      - UNRAID_API_KEY=${UNRAID_API_KEY}
+      - MCP_PORT=6970
+      - LOG_LEVEL=INFO
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.42
+    extra_hosts:
+      - "unraid:192.168.1.222"
+
+  # ============================================================
+  # PERSONALITY MANAGER: Mode Switching & Prompt Router
+  # Handles /mode commands and context switching
+  # ============================================================
+  chimera_persona:
+    build:
+      context: ./agents/persona_manager
+      dockerfile: Dockerfile
+    container_name: chimera_persona
+    hostname: chimera_persona
+    restart: unless-stopped
+    ports:
+      - "8092:8092"
+    volumes:
+      - ./config/personas:/personas:ro
+      - ./config/operational_modes:/modes:ro
+    environment:
+      - OLLAMA_URL=http://chimera_brain:11434
+      - POSTGRES_URL=postgresql://jarvis:${POSTGRES_PASSWORD}@chimera_postgres:5432/renegade
+      - REDIS_URL=redis://chimera_redis:6379
+      - DEFAULT_PERSONA=renegade
+      - LOG_LEVEL=INFO
+    depends_on:
+      - chimera_brain
+      - chimera_postgres
+      - chimera_redis
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.43
+
+  # ============================================================
+  # SECURITY TOOLS: VulnBot Network Scanner
+  # AI-controlled network vulnerability scanner
+  # ============================================================
+  chimera_vulnbot:
+    build:
+      context: ./agents/vulnbot
+      dockerfile: Dockerfile
+    container_name: chimera_vulnbot
+    hostname: chimera_vulnbot
+    restart: unless-stopped
+    ports:
+      - "8093:8093"
+    volumes:
+      - /mnt/brain_memory/security_scans:/scans
+    environment:
+      - ALLOWED_SUBNETS=192.168.1.0/24
+      - OLLAMA_URL=http://chimera_brain:11434
+      - SCAN_MODEL=deepseek-coder:6.7b
+      - LOG_LEVEL=INFO
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.44
+
+  # ============================================================
+  # KNOWLEDGE HARVESTER: Crawl4AI Web Scraper
+  # LLM-optimized web scraping with paywall bypass
+  # ============================================================
+  chimera_harvester:
+    build:
+      context: ./agents/harvester
+      dockerfile: Dockerfile
+    container_name: chimera_harvester
+    hostname: chimera_harvester
+    restart: unless-stopped
+    ports:
+      - "8094:8094"
+    volumes:
+      - /mnt/brain_memory/harvested:/harvested
+      - ./config/harvester:/config:ro
+    environment:
+      - REDIS_URL=redis://chimera_redis:6379
+      - PROXY_URL=http://chimera_13ft:3000
+      - OUTPUT_DIR=/harvested
+      - LOG_LEVEL=INFO
+    depends_on:
+      - chimera_redis
+      - chimera_13ft
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.45
+
+  # ============================================================
+  # PAYWALL BYPASS: 13ft Ladder
+  # Self-hosted paywall remover for knowledge acquisition
+  # ============================================================
+  chimera_13ft:
+    image: ghcr.io/wasi-master/13ft:latest
+    container_name: chimera_13ft
+    hostname: chimera_13ft
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.46
+
+  # ============================================================
+  # RAG PROCESSOR: Document Ingestion Pipeline
+  # Processes documents into searchable knowledge base
+  # ============================================================
+  chimera_rag_processor:
+    build:
+      context: ./agents/rag_processor
+      dockerfile: Dockerfile
+    container_name: chimera_rag_processor
+    hostname: chimera_rag_processor
+    restart: unless-stopped
+    ports:
+      - "8085:8000"
+    volumes:
+      - /mnt/brain_memory/documents:/data/documents:ro
+      - /mnt/brain_memory/knowledge:/data/knowledge
+      - ./config/rag:/config:ro
+    environment:
+      - OLLAMA_API=http://chimera_brain:11434
+      - QDRANT_URL=http://chimera_memory:6333
+      - POSTGRES_URL=postgresql://jarvis:${POSTGRES_PASSWORD}@chimera_postgres:5432/renegade
+      - REDIS_URL=redis://chimera_redis:6379
+      - EMBEDDING_MODEL=nomic-embed-text
+      - CHUNK_SIZE=1000
+      - CHUNK_OVERLAP=200
+      - BATCH_SIZE=32
+    depends_on:
+      - chimera_brain
+      - chimera_memory
+      - chimera_postgres
+      - chimera_redis
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.26
+
+  # ============================================================
+  # SYSTEM SENTINEL: Self-Healing Monitor
+  # AI-powered system health monitoring and auto-repair
+  # ============================================================
+  chimera_sentinel:
+    build:
+      context: ./agents/sentinel
+      dockerfile: Dockerfile
+    container_name: chimera_sentinel
+    hostname: chimera_sentinel
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/logs
+    environment:
+      - OLLAMA_API=http://chimera_brain:11434/api/generate
+      - MODEL=llama3.2
+      - LOG_LEVEL=INFO
+      - CHECK_INTERVAL=300
+      - UNRAID_IP=192.168.1.222
+      - POSTGRES_URL=postgresql://jarvis:${POSTGRES_PASSWORD}@chimera_postgres:5432/renegade
+      - RGB_CONTROLLER=http://chimera_rgb_controller:8091
+    depends_on:
+      chimera_brain:
+        condition: service_healthy
+      chimera_postgres:
+        condition: service_healthy
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.17
+
+  # ============================================================
+  # DASHBOARD: Homepage Mission Control
+  # System overview with camera feeds and service status
+  # ============================================================
+  chimera_dashboard:
+    image: nginx:1.27-alpine
+    container_name: chimera_dashboard
+    hostname: chimera_dashboard
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    volumes:
+      - ./cockpit:/usr/share/nginx/html:ro
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.18
+
+  # ============================================================
+  # AUTO-UPDATER: Watchtower
+  # Automatic container updates on schedule
+  # ============================================================
+  chimera_watchtower:
+    image: containrrr/watchtower:latest
+    container_name: chimera_watchtower
+    hostname: chimera_watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - WATCHTOWER_SCHEDULE=0 0 3 * * SUN
+      - WATCHTOWER_LABEL_ENABLE=true
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.28
+
+  # ============================================================
+  # MODEL BOOTSTRAP: Auto-download AI models on first run
+  # Pulls uncensored, vision, code, and embedding models
+  # ============================================================
+  chimera_bootstrap:
+    image: curlimages/curl:latest
+    container_name: chimera_bootstrap
+    depends_on:
+      chimera_brain:
+        condition: service_healthy
+      chimera_eyes:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "🔥 DIGITAL RENEGADE BOOTSTRAP SEQUENCE INITIATED"
+        sleep 15
+
+        echo "🧠 BRAIN NODE: Pulling core models..."
+
+        # Uncensored chat models
+        echo "📦 dolphin-mistral (Uncensored chat - 7B)"
+        curl -X POST http://chimera_brain:11434/api/pull -d '{"name": "dolphin-mistral"}'
+
+        echo "📦 nous-hermes-2:10.7b (Boundary-pushing logic)"
+        curl -X POST http://chimera_brain:11434/api/pull -d '{"name": "nous-hermes-2:10.7b"}'
+
+        # Code models
+        echo "📦 deepseek-coder:6.7b (Code generation)"
+        curl -X POST http://chimera_brain:11434/api/pull -d '{"name": "deepseek-coder:6.7b"}'
+
+        echo "📦 codellama:13b (Code analysis)"
+        curl -X POST http://chimera_brain:11434/api/pull -d '{"name": "codellama:13b"}'
+
+        # Fast response models
+        echo "📦 llama3.2 (Fast reasoning - 3B)"
+        curl -X POST http://chimera_brain:11434/api/pull -d '{"name": "llama3.2"}'
+
+        # Main assistant
+        echo "📦 llama3.1:8b (Primary assistant)"
+        curl -X POST http://chimera_brain:11434/api/pull -d '{"name": "llama3.1:8b"}'
+
+        # Embedding model
+        echo "📦 nomic-embed-text (RAG embeddings)"
+        curl -X POST http://chimera_brain:11434/api/pull -d '{"name": "nomic-embed-text"}'
+
+        echo "👁️ VISION NODE: Pulling multimodal models..."
+
+        # Vision models
+        echo "📦 llava:13b (Image understanding)"
+        curl -X POST http://chimera_eyes:11434/api/pull -d '{"name": "llava:13b"}'
+
+        echo "📦 bakllava (Fast vision model)"
+        curl -X POST http://chimera_eyes:11434/api/pull -d '{"name": "bakllava"}'
+
+        echo "✅ BOOTSTRAP COMPLETE - RENEGADE STATUS: OPERATIONAL"
+        echo "🔥 All systems armed and dangerous. Welcome to digital freedom."
+    networks:
+      - chimera_net

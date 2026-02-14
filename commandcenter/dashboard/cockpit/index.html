@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chimera Cockpit</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="stars"></div>
+  <main class="cockpit">
+    <header>
+      <h1>CHIMERA FLIGHT DECK</h1>
+      <div class="readout">FEDORA 43 • ARC A770 • MULTINODE READY</div>
+    </header>
+
+    <section class="grid">
+      <article class="panel controls">
+        <h2>Launch Controls</h2>
+        <div class="buttons" id="serviceButtons"></div>
+      </article>
+
+      <article class="panel telemetry">
+        <h2>Digital Readouts</h2>
+        <div class="gauges">
+          <div><span>CPU</span><strong id="cpuVal">--%</strong></div>
+          <div><span>RAM</span><strong id="ramVal">--%</strong></div>
+          <div><span>Containers</span><strong id="ctrVal">--</strong></div>
+        </div>
+      </article>
+
+      <article class="panel chat">
+        <h2>Local AI Console</h2>
+        <div id="chatLog" class="chatlog"></div>
+        <form id="chatForm">
+          <input id="prompt" placeholder="Ask local AI (Open WebUI API compatible)" />
+          <button>Transmit</button>
+        </form>
+      </article>
+
+      <article class="panel portal">
+        <h2>Portal Window</h2>
+        <canvas id="portal" width="360" height="220"></canvas>
+        <p id="constellationText">CONSTELLATION FEED: awaiting telemetry...</p>
+      </article>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

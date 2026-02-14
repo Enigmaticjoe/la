@@ -1,0 +1,99 @@
+version: "3.9"
+
+services:
+  cockpit-dashboard:
+    image: nginx:1.27-alpine
+    container_name: cockpit-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - /opt/chimera/cockpit-dashboard:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: chimera-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=30m
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: chimera-open-webui
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - ollama
+      - qdrant
+      - redis
+    environment:
+      - WEBUI_NAME=${WEBUI_NAME}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - ENABLE_OPENAI_API=true
+      - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VECTOR_DB=qdrant
+      - QDRANT_URI=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - open_webui_data:/app/backend/data
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.4
+    container_name: chimera-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: chimera-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  portainer:
+    image: portainer/portainer-ce:2.21.5
+    container_name: chimera-portainer
+    restart: unless-stopped
+    command: -H unix:///var/run/docker.sock
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+  cloudflared:
+    image: cloudflare/cloudflared:2025.2.1
+    container_name: chimera-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
+    profiles: ["cloudflare"]
+
+volumes:
+  ollama_data:
+  open_webui_data:
+  qdrant_data:
+  redis_data:
+  portainer_data:

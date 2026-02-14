@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chimera Cockpit</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="stars"></div>
+    <main class="cockpit-shell">
+      <header class="topbar">
+        <div>
+          <h1>CHIMERA COMMAND COCKPIT</h1>
+          <p>Portainer-first launch page for multi-node AI operations</p>
+        </div>
+        <div class="status-pill">SYSTEM MODE: <span id="mode">STANDBY</span></div>
+      </header>
+
+      <section class="layout-grid">
+        <section class="panel telemetry">
+          <h2>Telemetry</h2>
+          <div class="readouts">
+            <div><label>Brain (Ollama)</label><strong id="brain-state">UNKNOWN</strong></div>
+            <div><label>Portainer</label><strong id="portainer-state">UNKNOWN</strong></div>
+            <div><label>Open WebUI</label><strong id="webui-state">UNKNOWN</strong></div>
+            <div><label>Qdrant</label><strong id="qdrant-state">UNKNOWN</strong></div>
+          </div>
+          <button id="refresh-status" class="switch-btn">Refresh Telemetry</button>
+        </section>
+
+        <section class="panel controls">
+          <h2>Mission Controls</h2>
+          <div class="btn-grid" id="service-links"></div>
+        </section>
+
+        <section class="panel chatbot">
+          <h2>Local AI Copilot</h2>
+          <div id="chat-log" class="chat-log" aria-live="polite"></div>
+          <form id="chat-form">
+            <input id="chat-input" placeholder="Ask local AI (Ollama) ..." required />
+            <button type="submit">Transmit</button>
+          </form>
+          <small>Uses <code>/api/generate</code> from your local Ollama node.</small>
+        </section>
+
+        <section class="panel portal">
+          <h2>Orbital Portal</h2>
+          <div class="portal-window">
+            <div class="constellation" id="constellation"></div>
+          </div>
+          <p class="caption">Live text forms a constellation in the upper-right portal.</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
