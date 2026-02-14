@@ -10,7 +10,7 @@ This guide provides complete setup instructions for running AWQ-quantized LLM mo
 - **GPU**: AMD Radeon RX 7900 XT (20GB VRAM, gfx1100 architecture)
 - **CPU**: Intel Core i9-285K or similar high-end processor
 - **RAM**: 128GB DDR5
-- **OS**: Pop!_OS 22.04 LTS (or Ubuntu-based Linux)
+- **OS**: Ubuntu 24.04 LTS / Ubuntu 22.04 LTS / Pop!_OS 22.04 LTS (or Ubuntu-based Linux)
 - **Target Model**: Dolphin 2.9.3 Llama 3.1 8B AWQ (~5-6GB quantized)
 
 ---
@@ -19,10 +19,11 @@ This guide provides complete setup instructions for running AWQ-quantized LLM mo
 
 ```bash
 # 1. Install ROCm (if not already installed)
-bash -c "$(wget -O - https://repo.radeon.com/rocm/rocm.gpg.key | sudo apt-key add -)"
-echo 'deb [arch=amd64] https://repo.radeon.com/rocm/apt/6.0/ ubuntu main' | sudo tee /etc/apt/sources.list.d/rocm.list
+sudo mkdir --parents --mode=0755 /etc/apt/keyrings
+wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest noble main" | sudo tee /etc/apt/sources.list.d/rocm.list
 sudo apt update
-sudo apt install rocm-hip-sdk rocm-smi-lib
+sudo apt install rocm-hip-sdk rocm-libs rocm-smi-lib
 
 # 2. Set environment variables
 sudo tee -a /etc/environment <<EOF
@@ -54,13 +55,21 @@ docker compose -f brain-stack.yml up -d
 
 ### 1. ROCm Installation (Detailed)
 
-**For Ubuntu 22.04 / Pop!_OS 22.04:**
+**For Ubuntu 22.04 / Pop!_OS 22.04 / Ubuntu 24.04:**
 
 ```bash
-# Add ROCm repository
-wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | sudo apt-key add -
-echo 'deb [arch=amd64] https://repo.radeon.com/rocm/apt/6.0/ ubuntu main' | \
+# Add ROCm repository (Ubuntu 24.04 Noble / 22.04 Jammy)
+sudo mkdir --parents --mode=0755 /etc/apt/keyrings
+wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
+    gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+
+# For Ubuntu 24.04 (Noble):
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest noble main" | \
     sudo tee /etc/apt/sources.list.d/rocm.list
+
+# OR for Ubuntu 22.04 (Jammy):
+# echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest jammy main" | \
+#     sudo tee /etc/apt/sources.list.d/rocm.list
 
 # Update and install ROCm
 sudo apt update

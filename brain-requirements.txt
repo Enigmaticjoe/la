@@ -59,11 +59,20 @@ requests>=2.31.0
 # 1. INSTALL ROCM FIRST
 # ----------------------
 # Follow BRAIN-AMD-SETUP.md for ROCm installation
-# ROCm 6.0+ required for RX 7900 XT support
+# ROCm 6.2+ required for RX 7900 XT support on Ubuntu 24.04
+# ROCm 6.0+ works for Ubuntu 22.04
 #
-# Ubuntu/Pop!_OS:
-#   wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | sudo apt-key add -
-#   echo 'deb [arch=amd64] https://repo.radeon.com/rocm/apt/6.0/ ubuntu main' | sudo tee /etc/apt/sources.list.d/rocm.list
+# Ubuntu 24.04 (Noble):
+#   sudo mkdir --parents --mode=0755 /etc/apt/keyrings
+#   wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+#   echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest noble main" | sudo tee /etc/apt/sources.list.d/rocm.list
+#   sudo apt update
+#   sudo apt install rocm-hip-sdk rocm-libs
+#
+# Ubuntu 22.04 (Jammy):
+#   sudo mkdir --parents --mode=0755 /etc/apt/keyrings
+#   wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+#   echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest jammy main" | sudo tee /etc/apt/sources.list.d/rocm.list
 #   sudo apt update
 #   sudo apt install rocm-hip-sdk rocm-libs
 
@@ -72,10 +81,14 @@ requests>=2.31.0
 # DO NOT use: pip install torch
 # Use ROCm-specific version:
 #
-#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
+# For ROCm 6.2+ (Ubuntu 24.04):
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
 #
-# Or for latest ROCm 6.1:
+# For ROCm 6.1 (Ubuntu 22.04):
 #   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.1
+#
+# For ROCm 6.0 (older):
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
 #
 # Verify installation:
 #   python3 -c "import torch; print(torch.cuda.is_available()); print(torch.version.hip)"
@@ -132,6 +145,13 @@ requests>=2.31.0
 #   pip install --upgrade pip setuptools wheel
 #
 # Step 3: Install PyTorch for ROCm
+# For Ubuntu 24.04 with ROCm 6.2+:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
+#
+# For Ubuntu 22.04 with ROCm 6.1:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.1
+#
+# For older ROCm 6.0:
 #   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
 #
 # Step 4: Install this requirements file

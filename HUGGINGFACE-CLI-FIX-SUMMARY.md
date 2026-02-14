@@ -98,7 +98,11 @@ sentencepiece>=0.1.99
 
 **Special Note**: PyTorch must be installed separately using ROCm-specific wheels:
 ```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
+# For Ubuntu 24.04 with ROCm 6.2+:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
+
+# For Ubuntu 22.04 with ROCm 6.1:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.1
 ```
 
 #### d) `brain-vllm-example.py` (Usage Example)
@@ -224,10 +228,19 @@ command:
 ### Complete Setup from Scratch
 
 ```bash
-# 1. Install ROCm (Ubuntu/Pop!_OS 22.04)
-wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | sudo apt-key add -
-echo 'deb [arch=amd64] https://repo.radeon.com/rocm/apt/6.0/ ubuntu main' | \
+# 1. Install ROCm (Ubuntu 24.04 Noble / 22.04 Jammy)
+sudo mkdir --parents --mode=0755 /etc/apt/keyrings
+wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
+    gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+
+# For Ubuntu 24.04 (Noble):
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest noble main" | \
     sudo tee /etc/apt/sources.list.d/rocm.list
+
+# OR for Ubuntu 22.04 (Jammy):
+# echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest jammy main" | \
+#     sudo tee /etc/apt/sources.list.d/rocm.list
+
 sudo apt update
 sudo apt install rocm-hip-sdk rocm-libs rocm-smi-lib
 
