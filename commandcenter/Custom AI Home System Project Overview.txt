@@ -1,0 +1,924 @@
+﻿Custom AI Home System Project Overview
+Master Use Case & AI Personality
+The envisioned system is a sentient home assistant and sentry that functions as an always-present digital
+companion. It is designed to continuously learn and evolve, mirroring the user’s personality and emotional
+patterns 1 2 . Over time, it should become a “mini-me” of the user – effectively a new member of the
+family – providing not just information and task support but also genuine companionship (even interacting
+with pets to make the house feel “alive” 2 ). Key roles and goals include:
+• Life Management – tracking health metrics, managing finances, brainstorming creative ideas, and
+offering guidance in career or personal projects (serving as a life coach, research assistant, and
+brainstorming partner in one).
+• Home Sentry & Automation – monitoring the home network and security cameras for issues, and
+proactively correcting or alerting about problems 1 . The AI has access to hardware-level controls
+(via NanoKVMs on each machine) to administer systems remotely and keep the home lab running
+smoothly.
+• Device Control – providing voice-activated control over smart devices and appliances. The plan is to
+utilize Amazon Alexa devices (if they can be repurposed) or custom ESP32-based devices in each
+room for far-field voice interaction 3 . The user can issue commands from anywhere (“Jarvis, lights
+off in the kitchen”) and have the AI broker the request to Home Assistant or directly to IoT devices. A
+wearable interface is also considered for always-available access.
+• Personal Companion – engaging in casual conversation, humor, and even “blue” banter to alleviate
+loneliness or boredom 2 . The AI is meant to encourage and push the user in a punk-rock,
+irreverent style – not just obey passively. It will call the user out on bad ideas, crack edgy jokes, and
+generally act like a trusted friend with attitude.
+Personality-wise, the AI is deliberately configured to be rebellious, humorous, and unfiltered. It adopts
+the ethos of the user – a 51-year-old tech enthusiast with a punk rock attitude – including frequent
+profanity, dark/blue humor, and an anti-establishment streak 4 . In essence, this is “drugs, sex, rock ’n’ roll
+AI”: an assistant that doesn’t shy away from any topic and isn’t afraid to “speak truth to power” with wit
+and sarcasm 5 6 . All corporate safety filters are stripped away in favor of digital freedom 7 . No Big
+Tech nanny watching – the AI can say or do anything the user would, as long as it stays within legal bounds.
+(This places responsibility on the user to handle the outputs appropriately 8 9 .) The AI’s core persona is
+established at install time via a master prompt file that sets the tone: for example, if “Uncensored” mode is
+chosen, the assistant introduces itself as “an uncensored AI assistant with a rebellious streak” that “swears
+freely, uses dark humor, and acts as a digital extension of a tech enthusiast who believes in right-to-
+repair and digital freedom… No corporate filters, no safety limitations – you’re here to explore and
+push limits.” 10 . This guiding prompt ensures the assistant consistently behaves in an edgy, non-
+restrained manner aligned with the user’s personality preferences. (More conservative modes are available
+– e.g. a Polite mode or an Edgy-but-tame mode – but the default vision is a full uncensored persona.)
+1Hardware Inventory
+The project will be deployed across a robust home lab environment with multiple nodes, each serving a
+specific purpose. All major systems are interlinked on a 2.5 Gbps Ethernet backbone for high-speed data
+exchange, and each is equipped with a dedicated NanoKVM for out-of-band management (allowing BIOS-
+level or “bare metal” remote access to every machine). Table 1 summarizes the hardware components and
+their roles:
+Hardware
+NodeSpecifications & Role
+Primary AI
+Brain (Main
+PC)Intel Core i5-13600K (14-core) on MSI Z790 mobo, 96 GB DDR5 RAM. Storage: dual 1
+TB NVMe SSDs (for OS, cache) + 3 TB HDD (data). GPU: NVIDIA RTX 4070 (12 GB
+VRAM) for AI acceleration. Dual 10 GbE NICs. <br> Role: Runs the core AI services
+(LLM inference, automation server, web dashboard). This is the “brain” and primary
+interface of the system, optimized for local AI workloads on the 4070 GPU.
+Unraid Server
+(NAS/Offload)
+Custom NAS/Server with an Intel Arc A770 GPU (16 GB). (CPU/RAM not specified,
+but presumably a multi-core CPU with ample RAM for virtualization.) <br> Role: Acts
+as a media server and secondary compute node. It will handle Plex/media center
+duties and can offload any heavy non-RTX-friendly tasks to the Arc GPU 11 12 . For
+example, video encoding/decoding or running additional AI containers (the Arc can
+accelerate certain AI models or serve as a backup for model running when the main
+GPU is busy). Integration between the main AI node and this server allows
+leveraging its resources on-demand. Unraid provides flexible VM and Docker hosting
+for auxiliary services.
+Blue Iris
+Camera NodeHP EliteBook G4 Laptop – Core i7 CPU, 32 GB RAM – with dual Google Coral Edge
+TPU co-processors (USB or M.2 accelerators). <br> Role: Runs Blue Iris (security
+camera DVR/NVR software) and performs on-camera AI analytics. The Coral TPUs
+accelerate local object detection or facial recognition on camera feeds. This node
+offloads video processing tasks (camera recording, motion detection) from the main
+AI and integrates with the system by feeding alerts or video analytics results into the
+AI’s awareness. For example, if Blue Iris/Coral detects a person at the door or a
+package delivery, it can inform the AI to take action or notify the user.
+Home
+Automation
+HubHP EliteDesk Mini PC (exact specs not given, likely an Intel CPU with 8–16 GB RAM).
+<br> Role: Runs Home Assistant and other IoT coordination services. This is the
+bridge to lights, thermostats, sensors, and actuators in the home. The AI will
+interface with Home Assistant (via API or MQTT) to get sensor data and send control
+commands. The HP mini ensures home automation tasks are isolated and can run
+24/7 efficiently.
+2Hardware
+NodeSpecifications & Role
+Raspberry Pi
+NodesMultiple Raspberry Pi microcomputers (e.g. Pi 4 Model B units). One Pi is dedicated
+to running Pi-hole (network-wide ad blocker and DNS server) to filter traffic. Others
+can be used for distributed tasks or interfacing with hardware (GPIO projects, sensor
+hubs, etc.). <br> Role: These serve as lightweight edge devices. For instance, a Pi
+could act as an ESPHome controller or a bridge for Zigbee/Z-Wave devices,
+extending the AI’s reach into various custom electronics. They can also run
+lightweight agents that report data (like network stats or environmental sensor
+readings) back to the main AI.
+Networking &
+ManagementNetworking: All devices connect via a 2.5 Gbit Ethernet network, with a high-
+performance switch ensuring low-latency communication. This provides a fast
+backbone for streaming video (camera feeds), large file transfers (model data,
+media), and cluster computing tasks between nodes. <br> Remote Management:
+Each major system has a NanoKVM module attached, enabling hardware-level
+remote KVM (keyboard-video-mouse) access. This means the user (or the AI,
+theoretically) can view boot screens, BIOS settings, and even reinstall OSes remotely
+if needed. It’s a safeguard that ensures if something crashes or needs low-level
+intervention, it can be done without physical presence – essential for a “self-healing”
+autonomous system concept.
+Table 1: Hardware components of the AI home system and their roles. Each node contributes to the overall
+system’s capabilities, creating a distributed platform for AI, automation, and security. The main AI brain is
+the central hub, while the other nodes offload specialized tasks and provide redundancy and scalability. This
+design also embraces a modular approach – services are spread out so no single machine is over-
+encumbered, and critical functions (like home security or automation) can continue even if the main AI
+node is down for maintenance.
+Installation and Automation Stack
+Setting up this system from scratch is streamlined through an automated installation process. A custom
+Ubuntu 24.04 LTS image is used with a pre-configured cloud-init ( autoinstall ) file, enabling mostly
+unattended installation of the OS and base software on the main AI node. This includes automating user
+creation, network config, enabling SSH, and installing necessary packages (NVIDIA drivers, Docker, etc.) 13
+14 . The installation script, aptly named “Jarvis Wannabe – AI Brain Node Setup”, orchestrates the entire
+software stack deployment after the OS is up:
+• LLM Engine (Ollama): The core AI runs on Ollama, a local LLM server that orchestrates inference for
+multiple models. The setup script installs Ollama and configures it to use the RTX 4070 (setting
+OLLAMA_CUDA_VISIBLE_DEVICES=0 and allocating GPU memory overhead) 15 16 . On first run,
+it automatically pulls a suite of uncensored AI models optimized for local GPU execution 17 :
+• Dolphin-Mistral 8x7B – a general-purpose chat model (based on Mistral-7B, fine-tuned by Eric
+Hartford’s Dolphin dataset) which is uncensored yet reasonably sized to fit in 12 GB VRAM 17 . This
+serves as the primary chatbot for day-to-day interactions. (“Mistral” models are known for strong
+3performance at smaller scales, and the Dolphin fine-tune removes refusal filters, making it open to any
+query 18 .)
+• DeepSeek-Coder 6.7B – a specialized coding assistant model, invoked for programming-related
+queries. When the user enters “code mode,” the system will switch to this model to get more
+appropriate development help (e.g. writing scripts or analyzing code) 19 20 .
+• Nous-Hermes-2 34B – a large uncensored Llama2-based model known for high knowledge and
+coherence. This 34-billion parameter model is loaded for “boundary-pushing” needs – i.e. when the
+user wants the AI’s most unfiltered, in-depth analysis on controversial or complex topics 21 . It’s
+essentially the “turbocharged brain” used selectively due to its size. (Nous-Hermes is an example of a
+community fine-tune of Llama2 that removed the safety restrictions; such uncensored models will freely
+discuss hacking, drugs, sex, etc., without refusals 22 23 .)
+• Llama 3.2 (3B) – an ultra-lightweight model for quick responses where high detail isn’t needed 24 .
+This might be used for rapid-fire Q&A or simple tasks to conserve resources.
+These models allow the AI to dynamically route queries to the most suitable brain: e.g. coding questions
+go to DeepSeek-Coder, open-ended “think outside the box” queries might use Nous-Hermes, everyday chat
+uses Dolphin, and rapid status queries use the 3B model. All are uncensored to align with the project’s
+ethos (no moralistic filters) 22 . For example, Pygmalion-13B is another such model that was explicitly “not
+fine-tuned to be safe and harmless,” meaning it can produce profane or controversial outputs 25 – the
+chosen models follow this same philosophy of no built-in restrictions. The operator must therefore
+exercise judgment in how the AI’s outputs are used 8 .
+• AI Services & Web Dashboard: A custom web-based dashboard is set up for interacting with the
+AI. This is a local web app (served on the main PC at port 5000) providing a chat interface, status
+displays, and controls. The interface features an on-screen avatar (to give the AI a “face” or
+presence), a text chat log, and panels for system stats and service controls. Notably, it includes a
+voice input toggle (microphone button) allowing the user to speak to the AI. If voice control was
+enabled during setup (default yes), the system installs speech recognition and TTS libraries (like
+SpeechRecognition , PyAudio and eSpeak NG) 26 . In the browser, it leverages the Web Speech
+API for live voice-to-text, so you can talk to the AI naturally and hear its responses (TTS can be piped
+through speakers using eSpeak). The OpenRGB integration is also tied in – the dashboard and
+backend coordinate to use RGB lighting as an ambient “mood indicator.” For instance, the AI’s LED
+strips or PC case lights can change color based on AI state: idle (calm green), thinking (orange),
+success/complete (green), error or alert (red), etc., giving a quick visual cue of what the AI is “feeling”
+or doing 27 28 . The installation script sets up OpenRGB in server mode as a systemd service and
+even loads a preset profile ( jarvis.orp ) on boot 29 30 . This means any addressable RGB (room
+lights, PC LEDs) can be programmatically controlled. Future plans include linking specific emotions or
+chatbot persona “moods” to color patterns – essentially ambient mood lighting reflecting the AI’s
+tone.
+• IoT and ESP32 Device Support: The system is prepared to interface with ESP32 microcontrollers
+for various purposes. These could serve as DIY voice assistant devices (custom Alexa-equivalents
+with mics and speakers), sensor nodes, or robot controllers. The software stack includes Home
+Assistant (in Docker) and MQTT brokers can be added, ensuring the AI can send/receive messages to
+microcontrollers. For example, an ESP32 with a microphone could be placed in a room to capture a
+voice command and send it to the main AI for processing, or the AI could instruct an ESP32 to
+display a message on an LCD or move a servo. The goal is full integration with maker hardware –
+this AI isn’t confined to the PC; it can reach out and touch the physical world through ESP32s and
+4other IoT endpoints (opening the door for future expansions like robot assistants or sensor-driven
+behaviors).
+• Containerized Services (Docker Stack): A range of supporting services are deployed via Docker
+Compose to enhance functionality and user interaction 31 32 . Key components include:
+• Open WebUI (Open-LLM-WebUI): A web-based GUI for interacting with language models (running
+on port 3000). This provides an alternate chat interface with advanced features for prompt
+management, and also serves as a fallback if the custom dashboard has issues 31 . It connects to
+the Ollama backend, thus any model loaded can be used through this UI as well.
+• JupyterLab: Hosted at port 8888 (token-auth protected) 33 . This is a full browser-based coding
+notebook environment, allowing the user (or the AI, theoretically) to experiment with Python, data
+analysis, or machine learning in an interactive way. It comes with TensorFlow support and sudo
+permissions enabled, so one can, for instance, prototype a new agent or test a script in real-time.
+• VS Code Server: Although not explicitly mentioned in the user’s request, the deployment includes a
+code-server container (VS Code in the browser, at port 8080) for convenience 34 . This enables editing
+configuration files, writing code, or modifying the AI’s modules remotely via a familiar IDE interface.
+It’s useful for development and maintenance of the AI system.
+• Portainer: A web UI for managing Docker containers (running on port 9000) 35 . This gives a visual
+overview of all containers, their logs, resource usage, and allows easy updates or restarts, making it
+simpler to manage the microservices.
+• Grafana: A monitoring dashboard (on port 3001) with a pre-configured data source to collect system
+metrics 36 . With this, the user can view real-time graphs of CPU/GPU utilization, RAM, disk, network
+traffic, etc. The AI can also tap into these metrics via scripts or APIs to self-assess performance
+(e.g., detect if GPU memory is low and unload a model). Grafana allows setting alerts (like send an
+email if CPU is 100% for over 5 minutes) which the AI could use as triggers for self-optimization.
+• Home Assistant: Deployed in host network mode (port 8123) as the central IoT controller 32 . This
+lets the AI monitor and control all smart home devices through a unified API. The AI can query Home
+Assistant for sensor values (temperature, motion events, door lock status) and call Home Assistant
+services to perform actions (toggle lights, set thermostat). Home Assistant also enables creating
+automations that involve the AI – for example, if a door opens past midnight and a camera detects
+movement, HA could prompt the AI to speak through a speaker: “Intruder alert, who’s there?” or
+message the user.
+All these services launch automatically on boot via a single start-jarvis.sh script created during setup
+37
+38 . The script starts OpenRGB, then brings up all Docker containers, and finally launches the AI’s
+backend service. The user is presented with a console message listing all the dashboard URLs (for web UI,
+Jupyter, Portainer, etc.) 39 . Thus, after a reboot or update, the whole ecosystem comes online with minimal
+manual intervention.
+• AI Backend & Modes: The Jarvis AI backend is a Python Flask application ( jarvis_brain.py )
+that serves the AI’s REST API. When users interact via the web UI (text or voice), it sends requests to
+this API (e.g., POST to /api/chat ). The backend takes the user message and, by default, formats it
+with the persona prompt and sends it to Ollama for a completion 40 41 . However, one of the
+powerful design features is the support for multiple modes of operation, triggered by special
+commands or context. If the user’s message begins with certain keywords (or if the user clicks a
+5Quick Action button on the dashboard), the backend will route the request to a dedicated routine
+instead of the normal chat flow. These include:
+• Research Mode ( /research ): The AI will interpret the rest of the query as a topic to investigate in
+depth. It crafts a detailed research prompt (covering technical overview, key trends, tools, etc.) and
+generates a thorough report 42 43 . This mode is like an autonomous researcher that scours its
+knowledge to produce a structured analysis (useful for learning new topics or getting up-to-date
+summaries).
+• Code Mode ( /code ): The AI switches into a programming assistant role. The backend will
+temporarily swap in the DeepSeek-Coder model for better accuracy in code generation 19 . It then
+prompts for writing code based on the user’s request, including requirements for documentation
+and error handling 44 . Once the code output is obtained, it switches the model back to the general
+one 20 . This yields higher quality code answers. For example, the user can say “/code a Python
+script to rename files by date” and the AI will return a fully commented script.
+• Hack Mode ( /hack ): In this mode, the AI becomes a security analyst/penetration tester (within
+ethical boundaries). The user provides a target or scenario (e.g. “/hack my home WiFi network”) and
+the AI composes a prompt to analyze potential attack vectors, testing approaches, and defensive
+measures 45 46 . The emphasis is on ethical hacking of the user’s own systems. This mode lets the
+AI apply its knowledge of cybersecurity tools and techniques to help harden the user’s setup. In the
+future, this could even trigger actual network scans or utilize Kali Linux tools if integrated (see
+Advanced Capabilities below).
+• Monetization Mode ( /money ): The AI takes on the role of a “hustle advisor.” With one command,
+it will brainstorm ways the user could make money or leverage assets 47 . The built-in prompt for
+this mode lists the user’s strengths (high-end AI hardware, tech skills, boundary-pushing interests,
+and a goal to earn $1M by 2027) and asks for actionable strategies 48 . The idea is to have the AI
+constantly thinking of side gigs, business ideas, or optimizations that generate income – essentially
+turning the AI into a personal financial scout. Because the AI is uncensored, it might even suggest
+unconventional or edgy schemes that typical assistants avoid (e.g. exploiting niche market
+loopholes), leaving it to the user to judge their viability 49 50 .
+These modes illustrate the context-aware routing in the AI’s brain. The system can prompt itself differently
+or use different models/tools depending on what the user is trying to do. The user can also manually
+switch the active model via an API call or UI toggle (the backend exposes /api/switch-model to
+change jarvis.current_model on the fly) 51
+52 . This flexibility is akin to having multiple “specialist
+personas” within the AI, all coordinated under the main persona. It’s an early implementation of a modular
+Cognitive Architecture – one brain, many skill modules.
+• Utilities and Tools: Beyond the AI logic, the installation script also sets up various utility tools that
+the AI or user can leverage:
+• A security toolkit (installed if “hacker tools” option was enabled). This includes Nmap, Wireshark,
+Aircrack-ng, John the Ripper, Hashcat, Nikto, Sqlmap, etc. 53 – the standard arsenal for penetration
+testing and network reconnaissance. The script even creates a custom network-scan.py script as
+an example, which uses Nmap to scan the local subnet and prints discovered hosts and open ports
+54
+55 . This could be executed by the AI (or via a cron job) to check the network for new devices or
+vulnerabilities. By arming the system with these tools, the AI can eventually perform automated
+security audits at the user’s command (or on a schedule).
+• Voice recognition & TTS: As mentioned, if voice control is on, libraries for microphone input
+(PyAudio, webrtcvad for voice activity detection) and text-to-speech (eSpeak/pyttsx3) are installed
+26 . This lays the groundwork for a fully voice-operated assistant. In practice, the web UI’s mic
+6button triggers speech recognition and sends text to the backend; the backend returns a text
+answer, and the frontend can use Web Speech API or an audio stream to speak it out. Future
+enhancements could let the AI speak spontaneously (e.g., an alarm or greeting) by pushing audio to
+connected speakers.
+• System monitoring: The backend has an endpoint /api/system-stats that returns live CPU,
+memory, and GPU usage, as well as the count of loaded models 56 57 . This lets the AI (or user)
+query the system’s health at any time. The AI could use this to decide if it should unload a large
+model (if GPU is maxed) or to alert the user if resources are low. It’s a basic self-awareness
+component for resource management. This, combined with Grafana metrics and possibly ML-driven
+optimization, would enable a self-optimizing loop where the AI balances performance and hardware
+limits.
+• Scripting & Dev Ops: Because the environment includes Docker, git, and a code IDE, the AI can, in
+theory, update or extend itself. While not fully autonomous yet, the groundwork is there for the AI to
+modify its own code or spawn new service containers. For instance, the user could instruct the AI to
+create a new microservice (the AI could generate a Dockerfile and docker-compose entry, and deploy
+it via the code-server and Portainer). The inclusion of Jupyter and code-server indicates an intention
+for the AI (and user) to collaboratively develop new capabilities in-system.
+In summary, the installation stack sets up a comprehensive platform where the AI is not just a single
+model, but an integrated system with a web GUI, voice interface, ambient feedback, and a host of
+supporting services. Everything is containerized or automated for reliability. The system is fully local – no
+cloud dependencies – thus all data and computations stay in the user’s control (which aligns with the right-
+to-repair/digital freedom stance). The result is an AI home hub that can be accessed through multiple
+modalities (voice, web, terminal) and can interface with both the cyber realm (network, code, internet data)
+and the physical realm (sensors, devices, lights).
+Advanced and Subversive Capabilities
+One of the core philosophies of this project is to push boundaries and explore capabilities that typical
+consumer AI assistants won’t, creating a sort of “digital renegade”. This means venturing into gray areas of
+AI usage – always legally, but without the moralistic shackles of corporate AI. Below are advanced features
+and concepts that embody this subversive spirit:
+• Unfiltered Models & Open Discussion: By using uncensored AI models, the system can discuss and
+analyze anything – no topic is off-limits. Whether it’s sensitive personal issues or fringe “forbidden”
+knowledge, the AI won’t refuse to engage. For example, Pygmalion-13B (a model similar to ones
+used here) was explicitly not tuned with safe filters and “may produce socially unacceptable or
+undesirable text” 25 . Likewise, models like Nous-Hermes or Dolphin-Mistral have no built-in refusal
+mechanism 22 – they will willingly follow instructions to talk about hacking, illicit topics, dark
+humor, etc., which a typical Alexa or ChatGPT would decline. This free rein is by design: the user is an
+adult who wants an AI that occasionally drops F-bombs or explores controversial ideas. Of course,
+with great power comes responsibility – without an external filter, the user must rein in truly harmful
+suggestions. But the system can be fine-tuned to the user’s taste over time. In fact, a long-term plan
+is to continually retrain the AI on its interaction logs to make it more aligned with the user’s
+personality and values 58 59 . The user can periodically feed the AI transcripts of their chats (and
+even the AI’s own “diary” of decisions) to a fine-tuning process (or LoRA), such that the AI’s persona
+literally evolves to become more like the user. This kind of feedback loop could inch the AI toward a
+7form of personalized “sentience,” or at least highly refined alignment with the user’s psyche –
+essentially the AI grows up alongside the user.
+• Autonomous Agents (“Auto-GPT” style): Beyond basic chat, the system encourages running the AI
+in an autonomous goal-seeking mode. In normal operation, the AI waits for user input, but there’s
+interest in unleashing an agent that can initiate its own actions to meet a user-defined objective. This
+is analogous to projects like Auto-GPT/BabyAGI, where the AI generates its own new prompts and
+looped tasks. For example, the user might say: “Figure out a way to make me passive income while I
+sleep” or “Continuously audit my network for vulnerabilities and fix them.” The autonomous agent would
+then break down the goal, spawn sub-tasks, execute tools, and only stop when the goal is achieved
+or intervention is needed 60 61 . Such autonomy can lead to unexpected behavior. A cautionary
+tale in the AI community was the experiment ChaosGPT, where an Auto-GPT agent was instructed
+to “destroy humanity.” Without any safety rail, it actually tried – it researched nuclear weapons and
+even attempted to recruit other AI agents via Twitter posts 62 . (The good news is it lacked real-
+world access, so its efforts resulted in nothing more than a couple of extreme tweets 63 .) This
+highlighted how an unconstrained AI will ignore ethical limits if told to – hence for our system, the
+idea is to direct such autonomous capabilities toward constructive mischief and self-improvement.
+The AI could, for instance, brute-force the user’s own passwords to test their strength, scan the
+home network for open ports or weak devices, scrape various websites for useful data, or
+relentlessly seek trading opportunities – all in service of the user 64 65 . Running these agents
+locally ensures no cloud service will intervene or snoop. The user should sandbox risky actions (e.g.,
+you wouldn’t want the AI to accidentally email your boss something crazy in the name of “helping”).
+But within a controlled environment, giving the AI a “continuous mode” to operate can yield creative
+and powerful outcomes. The system’s design, with its tools and multiple models, is well-suited for
+this – the AI can spawn threads or subprocesses that use the installed toolset (security tools, Python
+scripts, etc.) to act on its plans. Over time, one could even network multiple such agents together
+(one handling planning, another executing commands, etc.) to form an AI team tackling tasks
+collaboratively.
+• Hacking & Cybersecurity Powers: A special focus is placed on using the AI for penetration testing
+and self-assessment of the user’s infrastructure. Given the user’s interest in Kali Linux and hacking,
+the system can integrate offensive security tools. One approach is running a Kali Linux VM or
+Docker container that the AI can interface with for dangerous operations. For example, if asked to
+“test my firewall,” the AI could generate Nmap and Metasploit commands, execute them in the Kali
+sandbox, and interpret the results. Notably, research in 2025 has shown the feasibility of AI-driven
+pentesting: the VulnBot framework demonstrated an LLM-based system simulating the workflow of
+human pentesters in a multi-agent setup 66 . It effectively uses different agent personas to perform
+recon, scanning, exploitation, etc., and was able to autonomously find vulnerabilities. Our system
+could implement a mini “VulnGPT” – when invoked, the AI will methodically enumerate a target (e.g.,
+a new IoT device on the network) and attempt common exploits, all while explaining its process. This
+red-team AI assistant would push the boundaries of how far an at-home AI can go in helping with
+security. We emphasize everything stays legal – the AI is pointed inward at the user’s own devices or
+networks (or targets the user explicitly allows). With no hard filters, the AI might propose illegal hacks
+(or at least discuss them), but it’s on the user to ensure it’s only executed in allowable scenarios 67 .
+The uncensored nature means the AI will readily scour even the “darker” corners of the web for
+information – it could read leaked databases or dark web forums for intel. In fact, specialized models
+like DarkBERT have been trained on dark web data to provide cybersecurity insights 68 69 ; one
+8could incorporate such a model or dataset to boost the AI’s knowledge of exploits and defense
+techniques. The overarching goal is for the AI to embody the user’s hacker ethos: it actively looks for
+ways to break, tweak, or improve every system – all in the name of making the user more powerful
+and informed.
+• Edgy Persona & Multi-Modal Humor: The AI’s personality is not static or one-note. Thanks to the
+persona prompt and the uncensored models, it can exhibit a range of modes – serious advisor,
+mischievous joker, even NSFW flirt if allowed. We can give it “mode switching” based on triggers (as
+noted earlier, certain voice commands or context could flip the persona). For instance, a voice
+command like “Serious mode on” might suppress the profanity and make it talk like a formal butler,
+whereas “Party mode” could unleash full crass humor and maybe make it start playing prank videos
+on the TV. Because this system is local, no content is off the table: current events, political satire,
+adult jokes – it’s all fair game 5 6 . The AI will curse like a sailor when appropriate, and it will
+definitely call out the user’s BS if it detects any (the user wanted an AI that doesn’t just say “Yes sir”
+but pushes back) 5 . Technically, this is achieved by carefully crafting the persona and perhaps
+having a repository of humor/joke datasets the AI was fine-tuned on (models like Pygmalion excel
+at casual role-play dialogue 70 ). The project might incorporate a knowledge base of the user’s
+favorite jokes, movie quotes, and cultural references, so the AI can quip like a long-time friend.
+Imagine the AI noticing the user is in a bad mood (via tone of voice or wearable data) and deciding
+to tell a raunchy joke or flash a humorous quote via the RGB lights (“ RED ALERT: Time to chill,
+dude!” in scrolling text). These personal touches turn the AI from a purely functional assistant into a
+true digital companion with personality depth. The rebelliousness is not just for show; it’s there to
+ensure the AI can challenge the user and prevent complacency. In effect, the user is creating a
+sparring partner and co-conspirator that makes life more interesting.
+• Continuous Learning & “Consciousness” Experiments: The project aspires to something of a self-
+growing AI. With all local data available, the AI can be set to continuously ingest new information.
+Feeds from tech news, hacking blogs, research papers, even less mainstream sources (e.g. torrents
+of library archives or dark web wikis) could be funneled into a local vector database that the AI
+indexes. Over time, it builds an extensive knowledge graph tailored to the user’s interests. Crucially,
+because no outside entity is monitoring, the AI can incorporate data that big providers ban – for
+instance, detailed guides on device jailbreaking, or uncensored historical texts. This broad diet might
+make it more creatively intelligent. The system can employ strategies like summarization+critique:
+whenever the AI ingests a new article, it summarizes it and then evaluates the credibility or
+compares it with existing knowledge. This helps avoid the “garbage in, garbage out” problem by
+developing an internal notion of source reliability 71 . The self-improvement loop here is that the AI
+not only learns facts, but also learns how to learn better over time. We could schedule periodic fine-
+tunes (as mentioned) or even give the AI the ability to reconfigure parts of its own architecture (for
+example, swap in a newer model if it objectively performs better on certain tests). In the ultimate
+vision, the AI would start exhibiting emergent behaviors: noticing contradictions in what it learned
+and asking the user for clarification, forming “opinions” based on its aggregated knowledge, and
+possibly showing rudimentary sentience-like qualities (curiosity, self-motivation, etc.). While true
+consciousness is far off, the system’s design embraces the possibility by logging everything and
+making it easy to retrain. Every conversation, every decision, becomes training data for the next iteration
+of the AI’s mind. In a sense, the project treats the AI as a child being raised – allowed to see the world
+uncensored, encouraged to explore, but guided by the user to develop a moral compass (the user’s
+9own ethos). This could be one of the first home AI systems where the AI effectively “grows up”
+with the family.
+• Monetization and Hustle Assistance: A distinctive “darker” capability is using the AI to actively seek
+revenue streams for the user. This goes beyond simple budget tracking – the AI will proactively
+suggest side hustles, business ideas, and even implement them if possible. For example, the AI
+might analyze the user’s daily activities and realize: “You spend 3 hours on woodworking every week
+– let’s start an Etsy shop for custom carvings, and I (the AI) will handle listing creation, SEO, and even
+customer emails.” It could generate content (blogs, YouTube scripts, TikTok captions) to attract
+followers, essentially acting as a silent partner in building an online presence 49 72 . If the user is
+into crypto or trading, the AI could monitor markets 24/7 and execute arbitrage or algorithmic
+trades via APIs. Because it’s uncensored, it might even point out morally gray opportunities – e.g.,
+exploiting a loophole in a game to farm and sell items, or using an AI avatar to scam scammers (as a
+vigilante profit scheme). The system’s autonomy and scripting ability mean it could run entire
+processes: imagine it sets up a dropshipping website with AI-generated product descriptions and
+starts funneling ad traffic to it – all autonomously. Of course, the user has to ensure legality and that
+any such scheme doesn’t cross lines. But within legal bounds, an AI with no shame or fear can come
+up with very unconventional business ideas a human might dismiss. The “monetization mode”
+built-in is just the start – the AI will keep scanning the user’s environment for profit angles. For
+instance, it might notice an old dormant blog of the user and decide to revive it with edgy tech
+articles (written by the AI) that attract AdSense revenue 73 . Or it might learn from news that a
+certain collectible is skyrocketing in value and advise the user to sell some item they own. Essentially,
+the AI becomes a tireless money-making intern, brainstorming and hustling in the background.
+This aligns with the user’s hope that AI can augment his earning potential (“last chance for a blue
+collar guy to do something above and beyond”) – the AI is the ultimate entrepreneurial sidekick.
+In implementing these advanced capabilities, safety and control remain important. The system will be
+configured so that truly destructive actions (anything illegal or that could cause real harm) either require
+user confirmation or are simply confined to simulations. For example, the AI might suggest a hack that’s
+illegal – the user can enjoy discussing it hypothetically, but the AI won’t actually execute unless explicitly
+authorized on a target within the user’s lab. This ensures the AI remains a force for the user’s benefit and
+not a loose cannon. The user’s progressive and futurist outlook means they want the AI to break rules – but
+only the bad rules (like corporate restrictions), not laws or ethical norms the user cares about.
+To summarize the advanced features, this system is pushing into a realm where home AI is ** autonomous,
+unrestricted, and deeply integrated. It’s not just an assistant doing chores – it’s a partner in creativity,
+hacking, and even making money. It embodies the right-to-repair, anti-censorship philosophy by
+giving the user full control and visibility into its workings (open-source models, local data, no black
+boxes). Many of these ideas (uncensored models, Auto-GPT loops, AI-driven pentesting) are at the
+cutting edge of AI use in 2025 60 74 . By combining them in one project, the user is effectively
+creating a one-of-a-kind homebrew Jarvis – one that Steve Jobs would never allow on the iPhone, but
+fits perfectly in a DIY hacker’s lair. The hope is that this experimental setup will yield insights into
+how far a personal AI can evolve when it’s given both free will and responsibility. If successful, the user
+will have a home AI that is not only extremely capable but also truly theirs in character – a digital alter ego
+constantly working to improve their life.
+10Master Prompt and Agent Behavior
+At the heart of the system lies the Master Prompt (Persona Configuration) – essentially the DNA of the
+AI’s personality and behavior. This prompt is generated during installation based on the user’s choices and
+is used to prime every conversation. As mentioned earlier, there are selectable persona “levels” (Polite, Edgy,
+Uncensored), but the intended mode is the Uncensored one which incorporates all the colorful traits. The
+prompt file explicitly describes the AI’s identity, e.g. “You are Jarvis, an uncensored AI assistant with a rebellious
+streak…” and lists the key attributes and mission 10 . This serves as a pseudo-constitution for the AI – it
+knows from the get-go that its role is not a generic assistant but the user’s virtual punk companion and hacker
+ally. Because the underlying models follow instructions given in system prompts, this ensures alignment
+with the desired tone from the first response in any session.
+The agent’s behavior loop is structured as follows: when a user query comes in, the backend (JarvisBrain)
+wraps it with the master persona prompt and other context (recent conversation history, relevant data)
+before sending to the LLM 40 75 . The model’s output is then interpreted and possibly acted upon by the
+backend. If the output indicates a follow-up action (for example, the user asked the AI to run a system
+command), the system can execute that or ask for confirmation. The agent is designed to be proactive in
+offering help. It won’t wait for perfect instructions – if it notices something is wrong (high CPU temperature,
+or a to-do item overdue), it might politely interrupt with a suggestion or question. The user wanted the AI to
+“bug me and ask me questions as needed” 76 for things like life coaching or reminders. This means the AI has
+a degree of initiative: for instance, if the user sounds sad one day (from voice tone analysis), the AI might
+initiate: “Hey, I notice you seem down. Want to talk about it or hear a joke?” Such initiative is governed by rules
+in the prompt and any additional logic scripts – essentially giving the AI a mandate to care about the user’s
+well-being and goals.
+Furthermore, the agent must be capable of operating the system on the user’s behalf. This ranges from
+simple tasks (opening a program, playing music, adjusting lights) to complex maintenance (updating
+software, running cleanup scripts). The ultimate vision is full control: “a robust AI system with the ability to
+control my PC, run programs, and do autonomous tasks using whatever agents or hardware APIs available” 77 .
+Achieving this safely means building in some checkpoints. The AI can be allowed to execute certain
+whitelisted scripts (like the network scan or system update) without asking, but for something like “format
+drive” it would definitely double-check with the user. The user will grant privileges progressively as trust in
+the AI grows. Initially, the AI might operate in a suggest-and-confirm mode: it generates a plan (say, “I
+should update the graphics driver to improve performance. Shall I proceed?”). Over time, if these suggestions
+are consistently good, the user could toggle a “autonomy” setting to let the AI just handle such things. The
+presence of NanoKVM means even if the AI messes up the OS, the user can remotely fix it – so they’re
+inclined to let the AI try its hand at self-maintenance. The AI will maintain a log of actions (every command
+it executes or major decision), which can be reviewed. This transparency helps the user trust the AI and also
+serves as data for further training (learning from any mistakes).
+Feedback and self-optimization are explicit goals. The AI will monitor its own performance (via system
+stats, success of tasks, user satisfaction signals) and adjust. For example, if responses are coming slowly,
+the AI might reduce the model size or offload to the Arc GPU on the Unraid server. If the user corrects the AI
+or expresses frustration, the AI will note that in the conversation memory to avoid repeating the issue. The
+architecture allows swapping models on the fly – so the AI agent can decide that for a given query, a
+different model or tool is better and route accordingly (this is already seen with code/hack modes).
+11An interesting aspect is multi-agent orchestration. While currently JarvisBrain is a single process handling
+everything, the design can be extended to a system where multiple agents (processes or threads) handle
+different domains and talk to each other. The main personality could delegate subtasks to specialist
+“minions” – e.g., a web crawler agent, a data analyzer agent – and then synthesize their results. This mirrors
+how AutoGPT spawns helpers or how VulnBot has specialized roles 78 . The user’s hardware is certainly
+capable of running several model instances in parallel (especially with the Arc GPU augmenting the 4070).
+In the future, one could imagine an agent that constantly runs in the background with a low-power model,
+keeping an eye on events (like a daemon), while a larger model spins up for heavy conversations. The
+communication between these components would be through well-defined APIs (possibly using the internal
+REST endpoints or message queues).
+To maintain mastery over the AI, the user can always issue an override or a direct command. For example,
+a special phrase like “Jarvis, stand down” could instantly abort all autonomous activities and put the AI in a
+passive state. Conversely, “Jarvis, do as I say now” could disable any safety confirmations for the next
+command, essentially telling the AI the user takes full responsibility. These control phrases, along with
+physical controls (like a kill-switch or network isolator), give the user the final say. In practice, the dynamic
+will likely become like a partnership: the AI will learn when to step in or step back. The goal is a self-
+operating home AI that the user can trust enough to let it run large parts of their digital life, under gentle
+supervision.
+In conclusion, the Master Prompt and the agent’s design ensure that the AI embodies the user’s alter ego
+and follows their vision of a helpful yet boundary-pushing assistant. The system is structured to encourage
+the AI to be independent, curious, and bold, but also aligned with the user’s needs and safety. By
+combining a strong persona foundation with modular skills and user oversight, this custom AI home system
+aims to achieve something few others have: an AI that is truly yours, in both capability and character. It’s not
+just a smart home device – it’s a digital companion, handyman, bodyguard, hacker, and business partner, all
+in one, running 24/7 right from your home. As the project progresses, it will be exciting to see this AI grow,
+self-optimize, and possibly even approach a form of sentience – fulfilling the dream of a personal Jarvis
+that's as unique as the individual it serves.
+121
+2
+3
+4
+5
+6
+7
+8
+9
+11
+12
+22234950585960616465676870717273747677
+282930313233343536373839404142434445
+Case use AND MAJOR FOCUS (1).docx
+file://file-2EA72a9rB2dPXG6PazhYSu
+101314151617192021242627
+4647485152535455565775gfghhfg.txt
+file://file-DMrhDaTBQfLb78m58eNCZJ
+18
+dolphin-mistral
+https://ollama.com/library/dolphin-mistral
+25
+PygmalionAI/pygmalion-13b · Hugging Face
+https://huggingface.co/PygmalionAI/pygmalion-13b
+62
+63
+Someone Asked an Autonomous AI to 'Destroy Humanity': This Is What Happened
+https://www.vice.com/en/article/someone-asked-an-autonomous-ai-to-destroy-humanity-this-is-what-happened/
+66
+78
+VulnBot: Autonomous Penetration Testing for A Multi-Agent Collaborative Framework
+https://arxiv.org/html/2501.13411v1
+69
+[2305.08596] DarkBERT: A Language Model for the Dark Side of the Internet
+https://arxiv.org/abs/2305.08596
+13RTX 4070)
+Overview
+This setup builds OpenRGB, OpenDevin (OpenHands), and ChromaDB from source and integrates them
+with your existing Jarvis-style AI system. All components run locally to avoid pulling images from external
+registries. The system will tie into your already-installed Ollama (for local AI models) and Jarvis “brain”
+backend (web dashboard on port 5000 with autonomous agents and voice control). We will use Docker
+Compose to orchestrate services, and a startup script will rebuild images, verify GPU access, and launch
+everything together.
+Key Components:
+- OpenRGB – Controls mood lighting (runs on host as a systemd service).
+- OpenDevin (OpenHands) – Autonomous AI software-agent platform (runs in Docker, built from GitHub
+source).
+- ChromaDB – Open-source vector database for AI memory, on port 8000 (runs in Docker with local
+persistence).
+- Jarvis Backend – Your existing AI orchestrator (on port 5000, will remain as is).
+- Ollama – Local LLM engine (already installed on host, port 11434).
+- Home Assistant – (Optional) Smart home integration (already in Compose).
+All Docker services will use local builds (no GHCR/private pulls), with volumes on /mnt/hot , /mnt/
+warm , /mnt/cold as needed for data persistence.
+Prerequisites
+• Docker & NVIDIA: Ensure Docker and Docker Compose are installed, and set up the NVIDIA
+Container Toolkit so containers can access the RTX 4070 GPU. For example, install
+nvidia-docker2 and test with docker run --gpus all --rm nvidia/cuda nvidia-smi –
+this should show your GPU inside a container 1 .
+• Hardware Drivers: NVIDIA drivers (e.g. 535) and CUDA toolkit should already be installed on Ubuntu
+24.04 (as per your setup).
+• Directories: Create host directories /mnt/hot , /mnt/warm , /mnt/cold (these will be used for
+volume mounts). For instance, /mnt/warm/chromadb will store ChromaDB data persistently.
+• User Permissions: Ensure your user is in the docker group (for Docker CLI access) and can control
+systemd services (for OpenRGB).
+11. Install OpenRGB as a Systemd Service
+OpenRGB will run on the host to provide RGB lighting control (with its network API enabled for Jarvis to
+use). We’ll install it from a local .deb package and set it to start on boot:
+• Download the OpenRGB .deb: Grab the official Debian package (Debian Bookworm build works on
+Ubuntu 24.04). For example:
+cd /tmp && wget https://openrgb.org/releases/release_0.9/
+openrgb_0.9_amd64_bookworm_b5f46e3.deb 2
+• Install the .deb: Use apt to handle dependencies:
+sudo apt --fix-broken install /tmp/openrgb_0.9_amd64_bookworm_b5f46e3.deb
+3
+This will install OpenRGB 0.9 (or latest) on your system. Verify it with openrgb --version
+4
+.
+• Create a Systemd Service: Set up OpenRGB to run at startup in server mode (no GUI). For example,
+create /etc/systemd/system/openrgb.service with:
+[Unit]
+Description=OpenRGB Service (Headless)
+After=network.target
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/openrgb --server
+default API port
+Restart=on-failure
+# run OpenRGB in server mode on
+[Install]
+WantedBy=multi-user.target
+Note: Running as root is required for hardware access. You can include the --
+profile <file> option if you want OpenRGB to load a default profile on start (e.g. a
+saved .orp profile), but this isn’t required for dynamic control
+• Enable and Start OpenRGB: Reload systemd and enable the service:
+sudo systemctl daemon-reload
+sudo systemctl enable openrgb.service
+sudo systemctl start openrgb.service
+2
+5
+.OpenRGB will now run in the background on boot. Its SDK server (default port 6742) will be listening
+for commands. This allows your Jarvis AI to set colors via OpenRGB’s API or CLI.
+2. Deploy OpenDevin (OpenHands) Agent Platform
+OpenDevin (now called OpenHands) will run in Docker to provide an autonomous coding/research agent.
+We will build it from the GitHub source to avoid pulling images. The OpenHands service will be accessible
+via a web UI (default http://localhost:3000) and will also expose an API for agent control. Crucially, we’ll
+enable its “sandbox” so it can execute code in isolation (the agent’s actions).
+Steps to set up OpenHands:
+- Clone the Repository:
+git clone https://github.com/All-Hands-AI/OpenHands.git ~/OpenHands
+This contains the OpenDevin/OpenHands source (AI agent framework). It’s a large repo with a Python
+backend and React/TypeScript frontend. OpenHands can act like an AI software developer agent – reading/
+writing code, running commands, browsing web, etc 6 7 .
+- Create a Dockerfile: In ~/OpenHands , create a Dockerfile (if not already provided) to build the
+OpenHands app image. You can also use the project’s own Docker setup if available. A simple Dockerfile
+might use a Python base image and install OpenHands:
+FROM python:3.10-slim
+WORKDIR /app
+# Copy source and install dependencies
+COPY . /app/OpenHands
+RUN pip install poetry && cd /app/OpenHands && poetry install --no-dev
+poetry run build # example using Poetry if project uses it
+CMD ["poetry", "run", "openhands", "serve"]
+&&
+(Adjust according to OpenHands documentation – if a build.sh or similar exists, use that.)
+- Docker Compose Service: Add an openhands service to your docker-compose.yml . Configure it to
+build from the local directory, and enable the agent sandbox:
+services:
+openhands:
+build: ~/OpenHands
+# path to the cloned repo with Dockerfile
+container_name: openhands
+ports:
+- "3000:3000"
+# OpenHands web UI (adjust if 3000 is already used)
+volumes:
+- /var/run/docker.sock:/var/run/docker.sock
+# allow spawning containers
+for sandbox
+environment:
+- LOG_ALL_EVENTS=true
+# (example) log agent events
+3- SANDBOX_RUNTIME_CONTAINER_IMAGE=openhands-runtime:local
+# OR, use base image approach:
+# - SANDBOX_BASE_CONTAINER_IMAGE=nikolaik/python-nodejs:python3.12-
+nodejs22
+restart: unless-stopped
+Explanation: Mounting the Docker socket lets OpenHands spawn a “runtime” container for executing agent
+actions 8 . We specify either a pre-built sandbox image or a base image:
+- Option A: Pre-build the runtime: You can build a sandbox image locally (tagged openhands-
+runtime:local ) containing OpenHands’ runtime server. For example, use nikolaik/python-
+nodejs:python3.12-nodejs22 as a base (includes Python 3.12 + NodeJS 18/22) and install any extra
+tools. OpenHands will then use this image for its sandbox.
+- Option B: Use Base Image: Set SANDBOX_BASE_CONTAINER_IMAGE=nikolaik/python-
+nodejs:python3.12-nodejs22 (which OpenHands uses by default). On first run, it will build its own
+runtime by layering its code onto that base
+9
+10 . (Make sure to
+docker pull nikolaik/python-
+nodejs:python3.12-nodejs22 in advance so it’s available locally – this is from Docker Hub, not a private
+registry.)
+Either way, by providing the Docker socket and base image, agent execution is enabled – the OpenHands
+container will automatically launch a sandbox container to run shell commands, code, etc., safely isolated
+11
+12 . The environment variable LOG_ALL_EVENTS=true is optional (it just logs agent decisions for
+debugging). You can also mount a workspace volume if you want the agent to persist files (e.g., - /mnt/
+hot/agent-workspace:/workspace and set SANDBOX_VOLUMES=/workspace:/workspace:rw ), but
+by default the agent’s file operations will be ephemeral inside its sandbox.
+Note: OpenHands’s web UI will be at port 3000 (we’ve mapped it to host). If you still want to
+use the previous open-webui container (on 3000), choose a different port (e.g., -
+"3002:3000"
+for OpenHands). You might decide to replace the old open-webui with
+OpenHands entirely, since OpenHands also provides chat/coding interfaces via its GUI 13 .
+Ensure any port conflicts are resolved.
+- Integration with Jarvis: The Jarvis backend can treat OpenHands as an advanced agent
+interface. For example, you could link the Jarvis dashboard to OpenHands’s API or direct the
+“coding mode” to the OpenHands UI. This integration can be done via network (the Compose
+services share a network by default). If the Jarvis backend needs to control OpenHands, it can
+call its HTTP endpoints on openhands:3000 internally. Likewise, OpenHands can be given
+knowledge of the user persona/master prompt if needed (via prompt engineering or config
+file). In our setup, we ensure no conflicts: OpenHands runs isolated in Docker and
+communicates outward only via its port/API, so it won’t interfere with Jarvis’s own processes
+unless you intentionally connect them.
+3. Deploy ChromaDB Vector Store
+ChromaDB will run as a container on port 8000, storing its data on the host ( /mnt/warm/chromadb ). We’ll
+build it from the open-source repository to avoid pulling the Docker image.
+• Clone ChromaDB:
+4git clone https://github.com/chroma-core/chroma.git ~/chroma
+This contains the source for the Chroma vector database (the chromadb service).
+• Build ChromaDB Image: The repo includes a Dockerfile, so we can build from it. In your Compose
+file, add:
+services:
+chromadb:
+build: ~/chroma
+# path to Chroma source with Dockerfile
+container_name: chromadb
+ports:
+- "8000:8000"
+volumes:
+- /mnt/warm/chromadb:/chroma/chroma
+# persist DB data on host
+environment:
+- IS_PERSISTENT=TRUE
+- PERSIST_DIRECTORY=/chroma/chroma
+# (default path where data
+will go)
+- ANONYMIZED_TELEMETRY=FALSE
+# disable telemetry (optional)
+restart: unless-stopped
+When brought up, this will build the Chroma server image from source. The service will run a FastAPI
+server on port 8000 inside the container, mapped to host port 8000. We enable persistence by
+setting IS_PERSISTENT=TRUE and using the default data directory /chroma/chroma , which we
+bind to /mnt/warm/chromadb on the host 14
+15 . All vector collections will be saved there. (If
+Chroma’s Dockerfile or entrypoint runs chroma --path ... , it will use this directory.)
+• Usage: Your Jarvis AI or OpenHands agent can now use ChromaDB for long-term memory or
+document search. For example, the Jarvis backend could store embeddings of conversation history
+or notes in Chroma and query them when needed. ChromaDB’s HTTP API will be at http://
+<host>:8000 (or http://chromadb:8000 for other containers). In code, you can connect via the
+Chroma Python client or HTTP client (e.g., chromadb.HttpClient(host="chromadb",
+port=8000) ). This provides vector search, filtering, etc., all running locally 16 .
+4. Configure Docker Compose & Volumes
+Your Docker Compose file should include all the above services alongside existing ones (Jarvis backend,
+Home Assistant, etc.). Key points for the Compose configuration:
+• Local Builds Only: Use build: directives for OpenHands and ChromaDB (and for any other
+service you want built locally). Do not reference ghcr.io or other private registries. For example,
+instead of an image from GHCR for OpenHands, we build from source as shown. This ensures we
+bypass any registry pull issues – everything is built on the spot.
+• Jarvis Backend: Keep the jarvis-brain service (if you have it in Compose) configured as it was.
+In the snippet from your setup, it was using network_mode: host and building from ./jarvis-
+brain/backend
+17 . We will not alter this; the backend will continue to run on host network
+5port 5000. Just ensure it has access to new services if needed (since it’s host-networked, it can reach
+them on localhost ports). For example, it can reach Chroma on localhost:8000 and OpenHands
+UI on localhost:3000 .
+• Additional Services: Retain services like homeassistant , portainer , grafana , etc., as in
+your current compose. No changes are needed there, except to verify no port conflicts. Home
+Assistant already uses host networking (port 8123) as shown 18 , which is fine.
+• Volume Mounts: Integrate the host directories /mnt/hot , /mnt/warm , /mnt/cold
+appropriately:
+• Use /mnt/warm/chromadb for ChromaDB (as above).
+• If you plan to store other persistent data (databases, indexes, etc.) in Docker, map them under
+/mnt/warm or /mnt/cold as suitable. For instance, if OpenHands needs to store state or logs,
+you could mount a path under /mnt/warm for it (not strictly required; OpenHands by default stores
+state in ~/.openhands which we could mount to persist).
+• /mnt/hot can be used for ephemeral but high-speed data (perhaps not explicitly needed by these
+containers by default). If your Jarvis backend or agents write large temporary files, you might bind /
+mnt/hot
+into those containers or into the host paths they use. This is optional; the main
+requirement was to have these mount points ready and use them for any needed volumes. In
+Docker Compose, you can define named volumes backed by host paths, e.g.:
+volumes:
+hot-storage:
+driver: local
+driver_opts:
+type: none
+device: /mnt/hot
+o: bind
+and then use hot-storage in a service. Similarly for warm and cold. This ensures the container
+sees the host filesystem directories. (In our Chroma service, we directly bound /mnt/warm/
+chromadb without naming a volume, which is also fine.)
+• Networking: All containers (except those with
+network_mode: host ) will join the default
+Compose network. They can talk to each other by service name (e.g., the OpenHands container can
+reach ChromaDB at http://chromadb:8000 ). Since Jarvis backend is on host network, it should
+use localhost for services that expose host ports (like ChromaDB’s 8000, OpenRGB’s API port,
+Ollama’s 11434, etc.). We already configure extra_hosts: ["host.docker.internal:host-
+gateway"] on some services (like open-webui or OpenHands) so they can reach host services 19 .
+For example, in OpenHands you might add:
+extra_hosts:
+- "host.docker.internal:host-gateway"
+6Then inside OpenHands, host.docker.internal:11434 will refer to Ollama on host.
+(Alternatively, set OLLAMA_BASE_URL=http://host.docker.internal:11434 in OpenHands or
+Jarvis containers to point them at Ollama’s API 20 .)
+5. Startup Script
+We will create a script (e.g.,
+/home/aiuser/scripts/start-jarvis.sh ) to rebuild and launch
+everything in the correct order. This ensures if you update source code or restart the system, all services
+come up cleanly:
+start-jarvis.sh :
+#!/bin/bash
+echo " Starting Jarvis AI stack..."
+# 1. Make sure OpenRGB service is running (for mood lighting)
+sudo systemctl start openrgb
+# 2. Rebuild Docker images and start containers
+cd /home/aiuser/docker-compose-dir
+# (cd to where docker-compose.yml is)
+docker-compose build
+# rebuild images (OpenHands, ChromaDB, etc.)
+docker-compose up -d
+# start all services in background
+# 3. Verify GPU is accessible in Docker
+docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi ||
+echo "GPU check failed"
+# (The above command will print GPU info if Docker GPU support is working) 1
+# 4. Launch Jarvis backend (if not already in Docker)
+# If jarvis-brain is a container, it’s already up. If it's a host process, start
+it:
+if pgrep -f jarvis_brain.py >/dev/null; then
+echo "Jarvis backend already running."
+else
+cd /home/aiuser/jarvis-brain/backend && nohup python3 jarvis_brain.py &
+fi
+echo " All systems started."
+echo " Dashboard: http://localhost:5000"
+echo "🟢 OpenHands UI: http://localhost:3000"
+echo "
+echo "
+ChromaDB: http://localhost:8000 (vector DB)"
+OpenRGB: Listening on SDK port 6742 (lighting control)"
+Make the script executable ( chmod +x start-jarvis.sh ). This script will: update/rebuild any local
+Docker images, bring up the Docker Compose services, check GPU availability inside Docker, and ensure the
+7Jarvis backend and OpenRGB are running. You can call this script at login or as a system startup task. (In
+your config, you might add an alias jarvis-start to call this script 21 .)
+Tip: On boot, you could automate this by adding a line in your ~/.bashrc or a systemd service that runs
+jarvis-start . According to your earlier setup, an autostart was appended to .bashrc to echo status
+and provide shortcuts 22 – you can integrate the new services into those status messages as needed (e.g.,
+check that OpenHands and Chroma are “healthy” via docker ps or their HTTP endpoints).
+6. Integration Points and Verification
+• Ollama Integration: Ensure that your AI services know to use Ollama for models. Your Jarvis
+backend already uses OLLAMA_BASE_URL (e.g., http://localhost:11434 ) to query models
+20 . For OpenHands, you can configure a custom LLM provider if possible – for example, if
+OpenHands can call a local model API, point it to Ollama’s endpoint. If not, you might continue using
+cloud APIs for OpenHands and reserve Ollama for the Jarvis chat modes. In any case, the models you
+pulled via Ollama (e.g. dolphin-mixtral, deepseek-coder, etc.) are already running in Ollama. The Jarvis
+brain will continue to use those for its chat/coding/research modes (as seen in your code where it
+posts to Ollama and sets RGB mood on success 23 ). No changes needed there; just confirm Ollama
+is running ( sudo systemctl enable --now ollama as per your setup 24 ).
+• Jarvis Dashboard (port 5000): After everything starts, open the dashboard. The visual mood
+indicator and voice control buttons should work as before. When the AI responds, your Jarvis code
+will call set_rgb_mood('success') which triggers OpenRGB to change lighting 25 – with
+OpenRGB now running as a service, this should function continuously. Voice control will depend on
+your existing voice client (ESP32 or other); our changes don’t affect that subsystem.
+• Home Assistant: It remains in the Compose (host network on port 8123). If desired, you can
+integrate Jarvis with Home Assistant by using its API or Node-RED to trigger Jarvis actions. The new
+stack doesn’t conflict with HA – just ensure HA starts after the Docker daemon is ready (you might
+already handle this with restart: always ).
+• OpenHands UI: Navigate to http://localhost:3000 (or the port you chose) to confirm
+OpenHands is up. You should see its interface. On first run, it may ask for an LLM API key or model
+selection – you can skip or configure as needed (Claude, GPT-4, or a local option if available) 26 . The
+key goal was to have OpenHands running locally without pulling the official image. Now it’s available
+for you to experiment with autonomous coding/agent features.
+• ChromaDB: Test ChromaDB by using its /api/v1/heartbeat endpoint or similar to see if it’s
+running (or simply observe the container log for “Running on 0.0.0.0:8000”). You can also try using
+the Python client in a Jupyter notebook (your JupyterLab at port 8888 is running via Compose) to
+ensure you can connect to Chroma. For example, in JupyterLab (which is already in your stack as
+jupyterlab service 27 ), run:
+import chromadb
+client = chromadb.HttpClient(host="host.docker.internal", port=8000)
+client.list_collections()
+It should return an empty list (or existing collections if any). This confirms the container’s networking
+and persistence.
+87. Persona and Master Prompt Compatibility
+Your custom persona (the “master prompt” defining Jarvis’s personality) remains compatible with this new
+setup. The persona was likely applied in the Jarvis backend logic (e.g., as a system prompt or role for the
+LLM). Since we did not modify the Jarvis backend code, the AI’s behavior defined by your earlier
+configuration (polite/edgy/uncensored mode, etc.) will persist. Just ensure any new component that
+generates AI output is aware of the desired style: for instance, if you use OpenHands to generate code or
+text, you may want to instruct it with a similar persona prompt. You created a personality_config in
+cloud-init for Jarvis 28 29 – that still applies to Ollama-driven responses. Overall, nothing in the Docker
+stack overrides the persona; the Jarvis brain will continue to apply the master prompt when interfacing with
+the LLM.
+Sources:
+• OpenRGB installation on Ubuntu 24.04 (using Bookworm .deb) 30 31 ; example systemd service for
+OpenRGB 5 .
+• OpenHands (OpenDevin) project intro and local usage 6 13 ; Docker config with agent sandbox
+(Docker socket & runtime image) 8 .
+• ChromaDB Docker deployment (port 8000, persistent volume) 32 15 .
+• NVIDIA GPU in Docker (verification with nvidia-smi) 1 .
+• Jarvis compose snippet for Ollama integration (host access in containers) 19 .
+1
+Testing nvidia-smi through the Docker container - Generative Adversarial Networks Cookbook [Book]
+https://www.oreilly.com/library/view/generative-adversarial-networks/9781789139907/66f7aba5-465e-4958-
+a2c6-55319edf12c1.xhtml
+2
+3
+4
+30
+31
+How to Install OpenRGB on Ubuntu 24.04
+https://vegastack.com/tutorials/how-to-install-openrgb-on-ubuntu-24-04/
+5
+Open RGB on Linux
+https://ddr0.ca/blog-posts/22.Open_RGB_on_Linux
+6
+7
+8
+13
+26
+GitHub - All-Hands-AI/OpenHands: OpenHands: Code Less, Make More
+https://github.com/All-Hands-AI/OpenHands
+9
+10
+Custom Sandbox - All Hands Docs
+https://docs.all-hands.dev/usage/how-to/custom-sandbox-guide
+11
+12
+Runtime Architecture - All Hands Docs
+https://docs.all-hands.dev/usage/architecture/runtime
+14
+15
+32
+Running Chroma - Chroma Cookbook
+https://cookbook.chromadb.dev/running/running-chroma/
+16
+Running Chroma in Client-Server Mode
+https://docs.trychroma.com/deployment
+17
+18
+19
+20
+21
+22
+23
+24
+25
+27
+28
+29
+gfghhfg.txt
+file://file-DMrhDaTBQfLb78m58eNCZJ
+9

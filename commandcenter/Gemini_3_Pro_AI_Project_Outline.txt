@@ -1,0 +1,91 @@
+
+🧠 PROJECT OUTLINE: GEMINI 3 PRO – SELF-HOSTED AI BRAIN & AGENT SYSTEM
+
+──────────────────────────────────────────────────────────────────────────────
+
+🔧 PURPOSE
+Continue building a fully autonomous, self-hosted AI assistant and agent framework using the existing infrastructure (Project Chimera, Pop!_OS Brain node, Docker/Portainer stack).
+
+Focus:
+- Optimized model selection
+- Tool & agent integration
+- API exposure
+- Voice control & wearable access
+- Maintenance automation
+
+──────────────────────────────────────────────────────────────────────────────
+
+📁 INCLUDED FILES (see accompanying ZIP)
+- Gem_BrainBox_AI_Build_Instructions.txt  – Install & config guide
+- docker-compose.yml                       – AI services stack
+- install_ai_stack.sh                      – Bash auto-installer
+- prompt_examples.txt                      – Ready-to-use prompts
+- langflow_agent_chain.json                – Langflow starter agent
+- traefik_ssl_stack.yml                    – Optional HTTPS/SSL layer
+
+──────────────────────────────────────────────────────────────────────────────
+
+🧭 GEMINI TASK FLOW – WHAT YOU SHOULD HELP BUILD
+
+✅ 1. MODEL OPTIMIZATION
+- Recommend model types:
+  • Mistral / TinyLlama – Low VRAM
+  • MythoMax / Nous Hermes – Midrange uncensored
+  • DeepSeek, CodeGemma – Code tasks
+- Use quantized formats where possible (GGUF, Q4_K_M)
+- Suggest multimodal options (Llava, Whisper, CLIP)
+
+✅ 2. AGENT & TOOL FRAMEWORK
+- Use Langflow, AutoGen, or OpenDevin to build:
+  • Task agents (Daily Ops, DevOps bot)
+  • Companion Mode AI
+  • Surveillance & media review agent
+- Define tools & memory persistence
+
+✅ 3. STACK & CONTAINER MANAGEMENT
+- Use Portainer + compose scripts to:
+  • Deploy new services
+  • Monitor and restart containers
+  • Save stacks as templates
+
+✅ 4. VOICE & WEARABLE INTEGRATION
+- Connect ESP32 satellites
+- Configure voice to API triggers
+- Wearable (future): trigger agent workflows on-demand
+
+✅ 5. WORKFLOW & API ENDPOINTS
+- Build FastAPI interface for:
+  • Model chat endpoints
+  • Secure token-based REST access
+  • Agent task triggering
+
+✅ 6. AUTO-HEALING & SELF-UPDATE
+- Use Watchtower for automatic updates
+- Build self-check agent to:
+  • Monitor stack health
+  • Reboot broken services
+  • Send alerts if needed
+
+✅ 7. KNOWLEDGE + MEMORY SYSTEM
+- Add LangChain + RAG integration
+- Enable document indexing (embeddings)
+- Persist system memory of previous chats & commands
+
+──────────────────────────────────────────────────────────────────────────────
+
+🧠 AI PERSONALITY GUIDELINES
+- Voice: blunt, irreverent, loyal
+- Style: sarcastic, punk-rock, uncensored
+- Ethos: privacy-first, anti-censorship
+- Behavior: prioritizes user intent, escalates only when needed
+
+──────────────────────────────────────────────────────────────────────────────
+
+🏁 COMPLETION CRITERIA
+- System runs fully local
+- Agents available for multiple task types
+- Voice/API integration functional
+- Stack is self-monitoring, auto-updating
+- Gemini 3 Pro actively helps improve and adapt system
+
+──────────────────────────────────────────────────────────────────────────────

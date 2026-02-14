@@ -1,0 +1,312 @@
+# ============================================================
+# PROJECT CHIMERA: NEURAL STACK - AMD/ROCm Edition
+# Pop!_OS 24.04 LTS | AMD Ryzen 7 7700 | AMD GPU | 30GB RAM
+# ============================================================
+# Deploy with: docker compose -f docker-compose.yml up -d
+# ============================================================
+
+name: chimera
+
+networks:
+  chimera_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  ollama_models:
+  qdrant_data:
+  openwebui_data:
+  comfyui_models:
+  comfyui_output:
+  alltalk_voices:
+  searxng_data:
+
+services:
+  # ============================================================
+  # NEURAL CORE: Ollama LLM Engine (AMD/ROCm)
+  # ============================================================
+  chimera_brain:
+    image: ollama/ollama:rocm
+    container_name: chimera_brain
+    hostname: chimera_brain
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_MAX_LOADED_MODELS=2  # Reduced for 30GB RAM
+      - HSA_OVERRIDE_GFX_VERSION=11.0.0  # For AMD GPU compatibility
+      - ROC_ENABLE_PRE_VEGA=1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render
+    security_opt:
+      - seccomp:unconfined
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # MEMORY: Qdrant Vector Database
+  # ============================================================
+  chimera_memory:
+    image: qdrant/qdrant:latest
+    container_name: chimera_memory
+    hostname: chimera_memory
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__LOG_LEVEL=INFO
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.11
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================
+  # FACE: Open WebUI Chat Interface
+  # ============================================================
+  chimera_face:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: chimera_face
+    hostname: chimera_face
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://chimera_brain:11434
+      - WEBUI_AUTH=false
+      - ENABLE_SIGNUP=true
+      - ENABLE_RAG_WEB_SEARCH=true
+      - RAG_WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://chimera_search:8080/search?q=<query>&format=json
+      - ENABLE_IMAGE_GENERATION=true
+      - AUTOMATIC1111_BASE_URL=http://chimera_artist:8188
+      - COMFYUI_BASE_URL=http://chimera_artist:8188
+    depends_on:
+      chimera_brain:
+        condition: service_healthy
+      chimera_search:
+        condition: service_started
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.12
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================
+  # SEARCH: SearXNG Privacy Search
+  # ============================================================
+  chimera_search:
+    image: searxng/searxng:latest
+    container_name: chimera_search
+    hostname: chimera_search
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./searxng:/etc/searxng:rw
+      - searxng_data:/var/searxng
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8081
+      - INSTANCE_NAME=Chimera Search
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.13
+
+  # ============================================================
+  # VOICE: AllTalk TTS Engine (ROCm disabled - CPU fallback)
+  # Note: AllTalk TTS has limited ROCm support, using CPU mode
+  # ============================================================
+  chimera_voice:
+    image: erew123/alltalk_tts:latest
+    container_name: chimera_voice
+    hostname: chimera_voice
+    restart: unless-stopped
+    ports:
+      - "8880:7851"
+    volumes:
+      - alltalk_voices:/app/voices
+      - alltalk_voices:/app/outputs
+    environment:
+      - USE_CPU=true  # Fallback to CPU for now
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.14
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7851/api/ready"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ============================================================
+  # ARTIST: ComfyUI Image Generation (ROCm)
+  # Note: Using ROCm-enabled version for AMD GPU
+  # ============================================================
+  chimera_artist:
+    image: yanwk/comfyui-boot:rocm
+    container_name: chimera_artist
+    hostname: chimera_artist
+    restart: unless-stopped
+    ports:
+      - "8188:8188"
+    volumes:
+      - comfyui_models:/home/runner/ComfyUI/models
+      - comfyui_output:/home/runner/ComfyUI/output
+    environment:
+      - CLI_ARGS=--listen 0.0.0.0 --port 8188
+      - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render
+    security_opt:
+      - seccomp:unconfined
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.15
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8188/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+
+  # ============================================================
+  # VOICE2IMAGE AGENT: Voice-driven image generation
+  # ============================================================
+  chimera_voice2image:
+    build:
+      context: ./agents/voice2image
+      dockerfile: Dockerfile
+    container_name: chimera_voice2image
+    hostname: chimera_voice2image
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_API=http://chimera_brain:11434
+      - COMFYUI_API=http://chimera_artist:8188
+      - WHISPER_MODEL=base
+      - LOG_LEVEL=INFO
+    depends_on:
+      chimera_brain:
+        condition: service_healthy
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.16
+
+  # ============================================================
+  # SENTINEL: Self-Healing Agent
+  # ============================================================
+  chimera_sentinel:
+    build:
+      context: ./agents/code
+      dockerfile: Dockerfile
+    container_name: chimera_sentinel
+    hostname: chimera_sentinel
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - OLLAMA_API=http://chimera_brain:11434/api/generate
+      - MODEL=llama3.2
+      - LOG_LEVEL=INFO
+    depends_on:
+      chimera_brain:
+        condition: service_healthy
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.17
+
+  # ============================================================
+  # DASHBOARD: Homepage Mission Control
+  # ============================================================
+  chimera_dashboard:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: chimera_dashboard
+    hostname: chimera_dashboard
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./dashboard/config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - PUID=1000
+      - PGID=1000
+    networks:
+      chimera_net:
+        ipv4_address: 172.28.0.18
+
+  # ============================================================
+  # MODEL BOOTSTRAP: Auto-pull essential models on startup
+  # Note: Reduced model set for 30GB RAM constraint
+  # ============================================================
+  chimera_bootstrap:
+    image: curlimages/curl:latest
+    container_name: chimera_bootstrap
+    depends_on:
+      chimera_brain:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "🧠 Bootstrapping Chimera Neural Models (AMD/ROCm Edition)..."
+        sleep 10
+
+        # Pull lightweight models optimized for 30GB RAM
+        echo "📦 Pulling llama3.2 (fast reasoning - 2GB)..."
+        curl -s -X POST http://chimera_brain:11434/api/pull -d '{"name": "llama3.2"}'
+
+        echo "📦 Pulling nomic-embed-text (embeddings - 270MB)..."
+        curl -s -X POST http://chimera_brain:11434/api/pull -d '{"name": "nomic-embed-text"}'
+
+        echo "📦 Pulling llama3.1:8b (main assistant - 4.7GB)..."
+        curl -s -X POST http://chimera_brain:11434/api/pull -d '{"name": "llama3.1:8b"}'
+
+        echo "ℹ️  Skipping larger models (dolphin-mistral:8x7b, nous-hermes-2:34b)"
+        echo "ℹ️  due to 30GB RAM constraint. Install manually if needed."
+
+        echo "✅ Bootstrap complete! AMD GPU is ready for AI workloads."
+    networks:
+      - chimera_net

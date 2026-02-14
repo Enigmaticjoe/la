@@ -1,0 +1,87 @@
+Internet access state,Device Type,Client Name,Client IP address,IP Method,Clients MAC Address,Interface,Tx Rate,Rx Rate,Access time
+Allow Internet access,"android-dhcp-9","android-dhcp-9",192.168.1.64,MAC-IP Binding,DC:A0:D0:11:43:66,Wired,-,-,-
+Allow Internet access,"dhcpcd-6.8.2:Linux-5.4.86-ab001","dhcpcd-6 8 2 Linux-5 4 86-ab001",192.168.1.71,MAC-IP Binding,8C:2A:85:AF:F3:2C,5 GHz,433.3,390,01:30:47
+Allow Internet access,"android-dhcp-9","android-dhcp-9",192.168.1.83,MAC-IP Binding,B0:8B:A8:96:11:4A,Wired,-,-,-
+Allow Internet access,"Loading manufacturer..","B0:AC:82:95:43:41",192.168.1.86,MAC-IP Binding,B0:AC:82:95:43:41,2.4 GHz,97.5,68.8,01:53:03
+Allow Internet access,"Loading manufacturer..","B0:AC:82:95:43:53",192.168.1.85,MAC-IP Binding,B0:AC:82:95:43:53,5 GHz,243.8,195,01:51:41
+Allow Internet access,"Loading manufacturer..","B0:AC:82:95:4C:6D",192.168.1.88,MAC-IP Binding,B0:AC:82:95:4C:6D,2.4 GHz,32.5,5.5,01:26:22
+Allow Internet access,"Nest Labs","38:A5:C9:6A:8F:C6",192.168.1.162,Automatic IP,38:A5:C9:6A:8F:C6,Wired,-,-,-
+Allow Internet access,"Chengdu Meross Technology Co. Ltd.","Chengdu Meross Technology Co",192.168.1.161,Static IP,48:E1:E9:E3:59:AC,Wired,-,-,-
+Allow Internet access,"MSFT 5.0","MSFT 5 0",192.168.1.133,Static IP,10:FF:E0:91:E7:05,Wired,-,-,-
+Allow Internet access,"android-dhcp-14","android-dhcp-14",192.168.1.143,Static IP,76:AD:48:03:89:C1,Wired,-,-,-
+Allow Internet access,"Loading manufacturer..","LGwebOSIT",192.168.1.148,MAC-IP Binding,34:19:4D:0B:4F:EA,5 GHz,130,0,00:00:00
+Allow Internet access,"Loading manufacturer..","Dietpi 224 pi2",192.168.1.224,Static IP,02:00:61:CC:ED:04,Wired,-,-,-
+Allow Internet access,"Loading manufacturer..","Pi1",192.168.1.231,Static IP,02:00:AD:67:C7:45,Wired,-,-,-
+Allow Internet access,"Tuya Smart Inc.","wlan0",192.168.1.196,MAC-IP Binding,10:5A:17:7F:AA:9E,Wired,-,-,-
+Allow Internet access,"Loading manufacturer..","Litter-Robot4",192.168.1.40,MAC-IP Binding,34:5F:45:E9:79:34,2.4 GHz,72.2,6,01:53:20
+Allow Internet access,"Roku Inc","RokuExpress",192.168.1.59,MAC-IP Binding,D4:E2:2F:FB:A3:10,Wired,-,-,-
+Allow Internet access,"android-dhcp-7.1.2","amazon-71d4cb8b2",192.168.1.62,MAC-IP Binding,4C:EF:C0:5B:E8:B3,2.4 GHz,144.4,52,01:52:44
+Allow Internet access,"Micro-Star INTL CO. LTD.","Micro-Star INTL CO   LTD",192.168.1.9,MAC-IP Binding,04:7C:16:B5:4A:40,Wired,-,-,-
+Allow Internet access,"Tuya Smart Inc.","Tuya Smart Inc",192.168.1.22,MAC-IP Binding,A8:80:55:80:1E:51,2.4 GHz,72.2,1,01:52:57
+Allow Internet access,"The Chamberlain Group Inc","The Chamberlain Group  Inc",192.168.1.21,MAC-IP Binding,64:52:99:6B:81:D0,Wired,-,-,-
+Allow Internet access,"Espressif Inc.","ESP_BDFADD",192.168.1.100,Automatic IP,60:01:94:BD:FA:DD,Wired,-,-,-
+Allow Internet access,"Tuya Smart Inc.","wlan0",192.168.1.110,Automatic IP,10:5A:17:7F:AD:6D,2.4 GHz,54,36,01:52:31
+Allow Internet access,"Tuya Smart Inc.","Tuya Smart Inc",192.168.1.67,MAC-IP Binding,C4:82:E1:12:F1:1D,Wired,-,-,-
+Allow Internet access,"dhcpcd-6.8.2:Linux-5.4.86-ab001","dhcpcd-6 8 2 Linux-5 4 86-ab001",192.168.1.70,MAC-IP Binding,58:A8:E8:FC:2C:08,2.4 GHz,72.2,1,01:52:57
+Allow Internet access,"Loading manufacturer..","20:98:ED:55:9E:FB",192.168.1.69,MAC-IP Binding,20:98:ED:55:9E:FB,Wired,-,-,-
+Allow Internet access,"Espressif Inc.","ESP_E121CE",192.168.1.82,MAC-IP Binding,40:F5:20:E1:21:CE,2.4 GHz,65,24,01:52:31
+Allow Internet access,"Tuya Smart Inc.","Tuya Smart Inc",192.168.1.81,MAC-IP Binding,A8:80:55:86:DB:19,2.4 GHz,72.2,19.5,01:30:23
+Allow Internet access,"CLOUD NETWORK TECHNOLOGY SINGAPORE PTE. LTD.","BRWC8A3E8DAF363",192.168.1.160,MAC-IP Binding,C8:A3:E8:DA:F3:63,5 GHz,52,72.2,00:54:32
+Allow Internet access,"NETGEAR","NETGEAR",192.168.1.184,MAC-IP Binding,3C:37:86:7E:F0:F1,Wired,-,-,-
+Allow Internet access,"IEEE Registration Authority","IEEE Registration Authority",192.168.1.130,Static IP,48:DA:35:6F:D8:29,Wired,-,-,-
+Allow Internet access,"Asus","RT-AX82U",192.168.1.142,Automatic IP,FC:34:97:07:50:70,Wired,-,-,-
+Allow Internet access,"Hewlett Packard","Hewlett Packard",192.168.1.232,Static IP,AC:E2:D3:1C:2C:5E,Wired,-,-,-
+Allow Internet access,"dhcpcd-6.8.2:Linux-5.4.86-ab001","dhcpcd-6 8 2 Linux-5 4 86-ab001",192.168.1.201,Automatic IP,28:24:C9:7A:4B:39,5 GHz,433.3,390,01:30:46
+Allow Internet access,"MSFT 5.0","MSFT 5 0",192.168.1.6,MAC-IP Binding,D8:43:AE:CC:BF:E5,Wired,-,-,-
+Allow Internet access,"Hangzhou BroadLink Technology Co.Ltd","BroadLink-Remote-7d-b2-da",192.168.1.30,Automatic IP,E8:16:56:7D:B2:DA,2.4 GHz,54,1,01:52:56
+Allow Internet access,"Tuya Smart Inc.","Tuya Smart Inc",192.168.1.103,Automatic IP,CC:8C:BF:D1:B7:97,Wired,-,-,-
+Allow Internet access,"Espressif Inc.","Espressif Inc",192.168.1.66,MAC-IP Binding,0C:8B:95:CA:AC:08,Wired,-,-,-
+Allow Internet access,"Shenzhen iComm Semiconductor CO.LTD","Shenzhen iComm Semiconductor CO",192.168.1.68,MAC-IP Binding,88:B5:FF:2B:D7:1A,5 GHz,150,120,01:29:13
+Allow Internet access,"Tuya Smart Inc.","Tuya Smart Inc",192.168.1.75,Automatic IP,A8:80:55:85:87:83,2.4 GHz,65,6.5,01:27:59
+Allow Internet access,"Tuya Smart Inc.","Tuya Smart Inc",192.168.1.80,MAC-IP Binding,7C:F6:66:E7:87:19,2.4 GHz,65,13,01:29:14
+Allow Internet access,"dhcpcd-6.8.2:Linux-3.18.19-gbc7","Dietpi 223 pi1",192.168.1.87,Automatic IP,68:54:FD:3A:2D:12,5 GHz,150,135,01:51:47
+Allow Internet access,"Arcadyan Corporation","Arcadyan Corporation",192.168.1.140,MAC-IP Binding,A4:CE:DA:82:93:83,Wired,-,-,-
+Allow Internet access,"Silicondust Engineering Ltd","Silicondust Engineering Ltd",192.168.1.147,MAC-IP Binding,00:18:DD:09:55:10,Wired,-,-,-
+Allow Internet access,"Hewlett Packard","Hewlett Packard",192.168.1.149,MAC-IP Binding,10:E7:C6:B1:D7:39,Wired,-,-,-
+Allow Internet access,"MSFT 5.0","MSFT 5 0",192.168.1.200,MAC-IP Binding,80:EE:73:F7:55:E7,Wired,-,-,-
+Allow Internet access,"Loading manufacturer..","Unrauad",192.168.1.222,MAC-IP Binding,34:5A:60:3E:A3:50,Wired,-,-,-
+Allow Internet access,"android-dhcp-16","android-dhcp-16",192.168.1.53,MAC-IP Binding,1A:96:74:1C:C8:CE,Wired,-,-,-
+Allow Internet access,"Amazon Technologies Inc.","Amazon",192.168.1.63,MAC-IP Binding,44:3D:54:28:95:AF,2.4 GHz,65,6,01:52:51
+Allow Internet access,"Tuya Smart Inc.","Tuya Smart Inc",192.168.1.14,Static IP,A8:80:55:84:DB:89,Wired,-,-,-
+Allow Internet access,"Shenzhen Ogemray Technology Co. Ltd.","Shenzhen Ogemray Technology Co",192.168.1.99,MAC-IP Binding,7C:DD:90:D8:DD:06,2.4 GHz,72.2,65,00:54:21
+Allow Internet access,"AltoBeam Inc.","AltoBeam Inc",192.168.1.248,Static IP,4C:60:BA:53:B1:1F,2.4 GHz,65,52,01:51:43
+Allow Internet access,"android-dhcp-16","Xiaomi-14T-Pro",192.168.1.51,MAC-IP Binding,E2:5E:2E:76:81:FD,5 GHz,864.7,576.5,00:22:31
+Allow Internet access,"Loading manufacturer..","AeroStreamH05",192.168.1.197,Automatic IP,DC:06:75:3D:5B:38,2.4 GHz,65,58.5,00:54:25
+Allow Internet access,"Shenzhen Phaten Tech. LTD","Shenzhen Phaten Tech  LTD",192.168.1.50,MAC-IP Binding,BC:FD:0C:F3:C2:BC,5 GHz,200,108,00:42:25
+Allow Internet access,"android-dhcp-16","android-dhcp-16",offline,Static IP,56:FB:A1:58:00:25,Wired,-,-,-
+Allow Internet access,"Vizio Inc","Bed Sound",offline,Static IP,C4:1C:FF:74:3A:2C,Wired,-,-,-
+Allow Internet access,"android-dhcp-7.1.2","android-dhcp-7.1.2",offline,Static IP,60:6D:3C:10:AA:C5,Wired,-,-,-
+Allow Internet access,"Tuya Smart Inc.","Tuya Smart Inc.",offline,Static IP,10:5A:17:7F:B2:99,Wired,-,-,-
+Allow Internet access,"Tuya Smart Inc.","Tuya Smart Inc.",offline,Static IP,10:5A:17:7F:B6:F2,Wired,-,-,-
+Allow Internet access,"android-dhcp-15","android-dhcp-15",offline,Static IP,C6:04:61:4D:D1:B5,Wired,-,-,-
+Allow Internet access,"android-dhcp-10","android-dhcp-10",offline,Static IP,00:0A:F5:26:C7:9C,Wired,-,-,-
+Allow Internet access,"Chengdu Meross Technology Co. Ltd.","Chengdu Meross Technology Co.,",offline,Static IP,48:E1:E9:E3:5A:AD,Wired,-,-,-
+Allow Internet access,"android-dhcp-16","android-dhcp-16",offline,Static IP,D2:FF:F1:D1:A5:C1,Wired,-,-,-
+Allow Internet access,"android-dhcp-14","android-dhcp-14",offline,Static IP,BC:DF:58:66:44:32,Wired,-,-,-
+Allow Internet access,"Others","lappy",offline,Static IP,4A:E9:3F:EC:D0:0D,Wired,-,-,-
+Allow Internet access,"MSFT 5.0","Stephanie",offline,Static IP,60:FF:9E:1C:04:70,Wired,-,-,-
+Allow Internet access,"android-dhcp-14","android-dhcp-14",offline,Static IP,3A:CA:C0:17:83:44,Wired,-,-,-
+Allow Internet access,"android-dhcp-14","android-dhcp-14",offline,Static IP,4A:83:BB:B8:75:DF,Wired,-,-,-
+Allow Internet access,"android-dhcp-15","My-Info-s-Tab-A9",offline,Static IP,E2:3C:3E:70:40:F3,Wired,-,-,-
+Allow Internet access,"android-dhcp-7.1.2","android-dhcp-7.1.2",offline,Static IP,10:09:F9:F9:D8:13,Wired,-,-,-
+Allow Internet access,"android-dhcp-12","android-dhcp-12",offline,Static IP,D0:65:B3:95:07:EB,Wired,-,-,-
+Allow Internet access,"android-dhcp-16","android-dhcp-16",offline,Static IP,CE:97:84:41:22:C6,Wired,-,-,-
+Allow Internet access,"android-dhcp-16","android-dhcp-16",offline,Static IP,56:0F:90:AB:80:FB,Wired,-,-,-
+Allow Internet access,"android-dhcp-16","android-dhcp-16",offline,Static IP,D6:C2:C3:93:C2:16,Wired,-,-,-
+Allow Internet access,"android-dhcp-16","android-dhcp-16",offline,Static IP,E2:5E:2E:76:81:FE,Wired,-,-,-
+Allow Internet access,"android-dhcp-14","android-dhcp-14",offline,Static IP,86:9C:ED:31:13:D7,Wired,-,-,-
+Allow Internet access,"MSFT 5.0","DESKTOP-U72LEIG",offline,Static IP,98:5F:D3:3E:13:F7,Wired,-,-,-
+Allow Internet access,"android-dhcp-14","android-dhcp-14",offline,Static IP,AA:BC:3B:5E:84:49,Wired,-,-,-
+Allow Internet access,"android-dhcp-15","android-dhcp-15",offline,Static IP,66:D6:D7:AC:93:D5,Wired,-,-,-
+Allow Internet access,"MSFT 5.0","DESKTOP-HVF15DU",offline,Static IP,44:AF:28:4E:B4:57,Wired,-,-,-
+Allow Internet access,"android-dhcp-12","android-dhcp-12",offline,Static IP,B0:6B:11:78:AA:08,Wired,-,-,-
+Allow Internet access,"android-dhcp-10","android-dhcp-10",offline,Static IP,84:B8:B8:7E:14:08,Wired,-,-,-
+Allow Internet access,"android-dhcp-15","android-dhcp-15",offline,Static IP,12:BF:B8:A0:81:80,Wired,-,-,-
+Allow Internet access,"Others","lappy",offline,Static IP,5E:F5:24:50:B9:F4,Wired,-,-,-
+Allow Internet access,"android-dhcp-16","android-dhcp-16",offline,Static IP,4E:86:22:C3:60:99,Wired,-,-,-
+Allow Internet access,"Loading manufacturer..","RT-BE92U",offline,Static IP,60:CF:84:3A:B3:40,Wired,-,-,-

@@ -1,0 +1,91 @@
+﻿# Download LM Studio
+wget https://releases.lmstudio.ai/linux/0.2.9/LMStudio-0.2.9.AppImage
+chmod +x LMStudio-0.2.9.AppImage
+./LMStudio-0.2.9.AppImage
+
+
+
+
+#!/bin/bash
+# Download and setup Dark Champion for Ollama
+
+
+# Install huggingface-cli if needed
+pip install huggingface_hub --break-system-packages
+
+
+# Search for available Dark Champion models
+echo "Searching Hugging Face for Dark Champion..."
+huggingface-cli scan-cache | grep -i dark
+
+
+# Download a specific quantized version (example)
+# You'll need to browse: https://huggingface.co/DavidAU
+# Look for GGUF versions that are Q4 or Q5 quantized
+
+
+# Example download (adjust model name based on what you find):
+huggingface-cli download DavidAU/L3.2-Dark-Champion-Instruct-8B-GGUF \
+    --include "*.Q4_K_M.gguf" \
+    --local-dir ./models/dark-champion
+
+
+# Create Modelfile for Ollama
+cat > Modelfile.darkhampion << 'EOF'
+FROM ./models/dark-champion/*.Q4_K_M.gguf
+
+
+PARAMETER temperature 0.8
+PARAMETER top_p 0.9
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+
+
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+EOF
+
+
+# Import to Ollama
+ollama create dark-champion -f Modelfile.darkhampion
+
+
+echo "Done! Run with: ollama run dark-champion"
+#!/bin/bash
+# Proven uncensored models available in Ollama right now
+
+
+echo "Installing maximum uncensored models for RTX 4070 12GB..."
+
+
+# 1. Dolphin Mixtral 8x7B - Top tier uncensored
+ollama pull dolphin-mixtral:8x7b-v2.7-q4_K_M
+
+
+# 2. Nous Hermes 2 Mistral - Excellent creative/adult content
+ollama pull nous-hermes2-mixtral:8x7b-dpo-q4_K_M
+
+
+# 3. WizardLM Uncensored 13B - Classic, very permissive
+ollama pull wizard-vicuna-uncensored:13b-q4_K_M
+
+
+# 4. Dolphin Llama3 8B - Fast and capable
+ollama pull dolphin-llama3:8b-v2.9-q8_0
+
+
+# 5. Hermes 3 Llama 3.1 8B - Most recent, very unrestricted
+ollama pull hermes3:8b-llama3.1-q8_0
+
+
+echo "All models installed!"
+echo ""
+echo "Run any with: ollama run <modelname>"
+echo ""
+echo "Recommended for your use case:"
+echo "  ollama run dolphin-mixtral:8x7b-v2.7-q4_K_M  (most capable)"
+echo "  ollama run hermes3:8b-llama3.1-q8_0          (fastest, newest)"

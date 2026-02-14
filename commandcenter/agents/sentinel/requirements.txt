@@ -1,0 +1,8 @@
+docker==7.0.0
+httpx==0.26.0
+psutil==5.9.8
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.25
+schedule==1.2.1
+loguru==0.7.2
+python-dotenv==1.0.1
