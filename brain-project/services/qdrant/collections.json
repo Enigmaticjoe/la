@@ -1,0 +1,121 @@
+{
+  "collections": [
+    {
+      "name": "conversations",
+      "description": "Long-term conversation memory and context",
+      "vector_config": {
+        "size": 768,
+        "distance": "Cosine"
+      },
+      "hnsw_config": {
+        "m": 16,
+        "ef_construct": 100
+      },
+      "optimizers_config": {
+        "indexing_threshold": 10000
+      },
+      "payload_schema": {
+        "conversation_id": "keyword",
+        "timestamp": "datetime",
+        "user_message": "text",
+        "assistant_message": "text",
+        "context": "text",
+        "model_used": "keyword",
+        "tokens_used": "integer",
+        "rating": "integer",
+        "tags": "keyword[]"
+      }
+    },
+    {
+      "name": "documents",
+      "description": "Ingested documents for RAG",
+      "vector_config": {
+        "size": 768,
+        "distance": "Cosine"
+      },
+      "hnsw_config": {
+        "m": 16,
+        "ef_construct": 100
+      },
+      "optimizers_config": {
+        "indexing_threshold": 10000
+      },
+      "payload_schema": {
+        "document_id": "keyword",
+        "source": "keyword",
+        "title": "text",
+        "content": "text",
+        "chunk_index": "integer",
+        "total_chunks": "integer",
+        "timestamp": "datetime",
+        "metadata": "json"
+      }
+    },
+    {
+      "name": "code_snippets",
+      "description": "Code examples and solutions from past interactions",
+      "vector_config": {
+        "size": 768,
+        "distance": "Cosine"
+      },
+      "hnsw_config": {
+        "m": 16,
+        "ef_construct": 100
+      },
+      "payload_schema": {
+        "language": "keyword",
+        "description": "text",
+        "code": "text",
+        "tags": "keyword[]",
+        "tested": "boolean",
+        "timestamp": "datetime"
+      }
+    },
+    {
+      "name": "web_search_results",
+      "description": "Cached web search results for faster retrieval",
+      "vector_config": {
+        "size": 768,
+        "distance": "Cosine"
+      },
+      "hnsw_config": {
+        "m": 8,
+        "ef_construct": 50
+      },
+      "payload_schema": {
+        "query": "text",
+        "result_title": "text",
+        "result_snippet": "text",
+        "result_url": "keyword",
+        "search_engine": "keyword",
+        "timestamp": "datetime",
+        "relevance_score": "float"
+      }
+    },
+    {
+      "name": "optimizations",
+      "description": "Self-evolution tracking - parameters and performance",
+      "vector_config": {
+        "size": 768,
+        "distance": "Cosine"
+      },
+      "hnsw_config": {
+        "m": 8,
+        "ef_construct": 50
+      },
+      "payload_schema": {
+        "optimization_type": "keyword",
+        "parameter_name": "keyword",
+        "old_value": "text",
+        "new_value": "text",
+        "performance_delta": "float",
+        "timestamp": "datetime",
+        "reasoning": "text"
+      }
+    }
+  ],
+  "initialization": {
+    "create_on_startup": true,
+    "recreate_if_exists": false
+  }
+}
