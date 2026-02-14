@@ -87,8 +87,6 @@ services:
       - "8000"
       - --host
       - "0.0.0.0"
-      - --device
-      - auto
       - --enable-auto-tool-choice
       - --tool-call-parser
       - hermes
