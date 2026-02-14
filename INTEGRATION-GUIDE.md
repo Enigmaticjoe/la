@@ -77,8 +77,13 @@ The setup script will:
 ## Step 3: Deploy Brain (30 min)
 
 ```bash
-# Download a model (pick one)
-huggingface-cli download cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-AWQ
+# Download model using automated script (recommended)
+bash brain-model-downloader.sh
+
+# OR manual download with proper flags:
+huggingface-cli download cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-AWQ \
+  --local-dir /home/brains/ai-models/models--cognitivecomputations--dolphin-2.9.3-llama-3.1-8b-AWQ \
+  --local-dir-use-symlinks False
 
 # Deploy the full stack
 docker compose -f brain-stack.yml up -d

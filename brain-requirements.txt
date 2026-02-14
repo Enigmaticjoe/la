@@ -1,0 +1,195 @@
+# Brain Node - Python Dependencies for AMD ROCm
+
+# This file lists Python dependencies for running AWQ-quantized models
+# on AMD Radeon RX 7900 XT using ROCm and vLLM.
+#
+# Installation:
+#   pip install -r brain-requirements.txt
+#
+# Or with virtual environment:
+#   python3 -m venv ~/venv-brain
+#   source ~/venv-brain/bin/activate
+#   pip install -r brain-requirements.txt
+
+# ============================================================================
+# Core Dependencies
+# ============================================================================
+
+# HuggingFace Hub - For model downloads
+huggingface_hub[hf_transfer]>=0.20.0
+
+# Transformers - Model architecture support
+transformers>=4.37.0
+
+# Torch - PyTorch for ROCm (install separately, see below)
+# DO NOT install torch via pip on AMD systems
+# Use ROCm-specific wheel from PyTorch website
+
+# ============================================================================
+# Optional Dependencies (for local inference testing)
+# ============================================================================
+
+# Accelerate - For distributed and mixed-precision inference
+accelerate>=0.25.0
+
+# BitsAndBytes - For quantization utilities
+# Note: ROCm support is experimental
+# bitsandbytes>=0.42.0
+
+# Sentencepiece - Tokenizer for many models
+sentencepiece>=0.1.99
+
+# Protobuf - Required by some models
+protobuf>=3.20.0
+
+# ============================================================================
+# Development & Testing
+# ============================================================================
+
+# Rich - Pretty terminal output
+rich>=13.7.0
+
+# Requests - HTTP client for API testing
+requests>=2.31.0
+
+# ============================================================================
+# Installation Notes for AMD ROCm
+# ============================================================================
+
+# 1. INSTALL ROCM FIRST
+# ----------------------
+# Follow BRAIN-AMD-SETUP.md for ROCm installation
+# ROCm 6.0+ required for RX 7900 XT support
+#
+# Ubuntu/Pop!_OS:
+#   wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | sudo apt-key add -
+#   echo 'deb [arch=amd64] https://repo.radeon.com/rocm/apt/6.0/ ubuntu main' | sudo tee /etc/apt/sources.list.d/rocm.list
+#   sudo apt update
+#   sudo apt install rocm-hip-sdk rocm-libs
+
+# 2. INSTALL PYTORCH FOR ROCM
+# ----------------------------
+# DO NOT use: pip install torch
+# Use ROCm-specific version:
+#
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
+#
+# Or for latest ROCm 6.1:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.1
+#
+# Verify installation:
+#   python3 -c "import torch; print(torch.cuda.is_available()); print(torch.version.hip)"
+
+# 3. VLLM FOR AMD ROCM
+# --------------------
+# vLLM runs in Docker container (brain-stack.yml)
+# Uses image: vllm/vllm-openai:v0.15.1
+# ROCm support is built into the official vLLM Docker images
+#
+# For local vLLM installation (advanced, not needed for Docker setup):
+#   pip install vllm
+#
+# Note: Local vLLM may require building from source for optimal AMD support
+
+# 4. AUTOAWQ FOR AMD (Optional - for local testing)
+# --------------------------------------------------
+# AutoAWQ provides AWQ quantization support
+# AMD ROCm support is experimental
+#
+# Installation:
+#   pip install autoawq
+#
+# Or build from source for latest AMD optimizations:
+#   git clone https://github.com/casper-hansen/AutoAWQ.git
+#   cd AutoAWQ
+#   pip install -e .
+
+# 5. ALTERNATIVE: VLLM (If running outside Docker)
+# -------------------------------------------------
+# vLLM natively supports AWQ models and is recommended over AutoAWQ
+# for inference on AMD GPUs. It's already included in the Docker stack.
+
+# ============================================================================
+# Environment Variables (Add to ~/.bashrc or /etc/environment)
+# ============================================================================
+# 
+# export HSA_OVERRIDE_GFX_VERSION=11.0.0
+# export ROCM_PATH=/opt/rocm
+# export HIP_VISIBLE_DEVICES=0
+# export PYTORCH_ROCM_ARCH=gfx1100
+# export HIP_FORCE_DEV_KERNARG=1
+# export HF_HUB_ENABLE_HF_TRANSFER=1  # For faster downloads
+
+# ============================================================================
+# Recommended Installation Steps
+# ============================================================================
+#
+# Step 1: Create virtual environment
+#   python3 -m venv ~/venv-brain
+#   source ~/venv-brain/bin/activate
+#
+# Step 2: Upgrade pip
+#   pip install --upgrade pip setuptools wheel
+#
+# Step 3: Install PyTorch for ROCm
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
+#
+# Step 4: Install this requirements file
+#   pip install -r brain-requirements.txt
+#
+# Step 5: Verify installation
+#   python3 -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'ROCm available: {torch.cuda.is_available()}')"
+#   huggingface-cli --version
+#
+# Step 6: Download models (optional, can be done in Docker)
+#   bash brain-model-downloader.sh
+
+# ============================================================================
+# Docker-Based Inference (Recommended)
+# ============================================================================
+#
+# The brain-stack.yml uses pre-built Docker images that include:
+# - vLLM with ROCm support
+# - PyTorch for ROCm
+# - All necessary dependencies
+#
+# You only need huggingface-cli locally for model downloads:
+#   pip install huggingface_hub[hf_transfer]
+#
+# Then use Docker for inference:
+#   docker compose -f brain-stack.yml up -d
+
+# ============================================================================
+# System Package Dependencies (Ubuntu/Pop!_OS)
+# ============================================================================
+#
+# sudo apt update
+# sudo apt install -y \
+#     build-essential \
+#     python3-dev \
+#     python3-pip \
+#     python3-venv \
+#     git \
+#     wget \
+#     curl \
+#     rocm-hip-sdk \
+#     rocm-libs \
+#     rocm-smi-lib
+
+# ============================================================================
+# Verification Commands
+# ============================================================================
+#
+# Check ROCm:
+#   rocm-smi
+#   rocminfo | grep gfx1100
+#
+# Check Python packages:
+#   pip list | grep -E "torch|transformers|huggingface"
+#
+# Test PyTorch ROCm:
+#   python3 -c "import torch; print(torch.cuda.is_available()); print(torch.version.hip)"
+#
+# Test HuggingFace:
+#   huggingface-cli --version
+#   huggingface-cli scan-cache

@@ -110,12 +110,17 @@ echo "✅ SearXNG configuration created"
 Pre-downloading models avoids long startup times:
 
 ```bash
-# Option 1: Using huggingface-cli (recommended)
-pip install huggingface-hub
-huggingface-cli download cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-AWQ \
-  --local-dir /home/brains/ai-models/models--cognitivecomputations--dolphin-2.9.3-llama-3.1-8b-AWQ
+# Option 1: Using brain-model-downloader.sh (recommended - fully automated)
+bash brain-model-downloader.sh
 
-# Option 2: Let vLLM download on first start (adds ~10-15 min to startup)
+# Option 2: Manual download using huggingface-cli
+pip install -U huggingface_hub[hf_transfer]
+huggingface-cli download cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-AWQ \
+  --local-dir /home/brains/ai-models/models--cognitivecomputations--dolphin-2.9.3-llama-3.1-8b-AWQ \
+  --local-dir-use-symlinks False \
+  --resume-download
+
+# Option 3: Let vLLM download on first start (adds ~10-15 min to startup)
 # Skip this step if you want automatic download
 ```
 
