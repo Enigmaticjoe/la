@@ -117,7 +117,7 @@ AVAILABLE_GB=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
 if [ "$AVAILABLE_GB" -lt 100 ]; then
     warn "Low disk space: ${AVAILABLE_GB}GB available"
     echo "   Recommended: 100GB+ for models and data"
-fi else
+else
     ok "Disk space: ${AVAILABLE_GB}GB available"
 fi
 
