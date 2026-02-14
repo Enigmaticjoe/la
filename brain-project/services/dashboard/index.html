@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 Brain AI System Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-container">
+                <div class="brain-icon">🧠</div>
+                <h1 class="title">
+                    <span class="glow">BRAIN</span> AI SYSTEM
+                </h1>
+            </div>
+            <div class="header-info">
+                <div class="time-display" id="currentTime"></div>
+                <div class="status-badge" id="systemStatus">
+                    <span class="status-dot pulse"></span>
+                    <span>ONLINE</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- System Metrics -->
+        <section class="metrics-grid">
+            <div class="metric-card gpu">
+                <div class="metric-icon">🎮</div>
+                <div class="metric-content">
+                    <div class="metric-label">GPU Temperature</div>
+                    <div class="metric-value" id="gpuTemp">--°C</div>
+                    <div class="metric-bar">
+                        <div class="metric-bar-fill" id="gpuTempBar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-card vram">
+                <div class="metric-icon">💾</div>
+                <div class="metric-content">
+                    <div class="metric-label">VRAM Usage</div>
+                    <div class="metric-value" id="vramUsage">-- / -- GB</div>
+                    <div class="metric-bar">
+                        <div class="metric-bar-fill" id="vramBar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-card cpu">
+                <div class="metric-icon">⚡</div>
+                <div class="metric-content">
+                    <div class="metric-label">CPU Usage</div>
+                    <div class="metric-value" id="cpuUsage">--%</div>
+                    <div class="metric-bar">
+                        <div class="metric-bar-fill" id="cpuBar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-card ram">
+                <div class="metric-icon">🔋</div>
+                <div class="metric-content">
+                    <div class="metric-label">RAM Usage</div>
+                    <div class="metric-value" id="ramUsage">-- / -- GB</div>
+                    <div class="metric-bar">
+                        <div class="metric-bar-fill" id="ramBar"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Services Status -->
+        <section class="services-section">
+            <h2 class="section-title">
+                <span class="title-icon">⚙️</span>
+                AI SERVICES STATUS
+            </h2>
+            <div class="services-grid" id="servicesGrid">
+                <!-- Services will be dynamically populated -->
+            </div>
+        </section>
+
+        <!-- System Information -->
+        <section class="info-section">
+            <div class="info-card">
+                <h3 class="info-title">
+                    <span class="title-icon">📊</span>
+                    System Information
+                </h3>
+                <div class="info-grid" id="systemInfo">
+                    <div class="info-item">
+                        <span class="info-label">Uptime:</span>
+                        <span class="info-value" id="uptime">--</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Active Services:</span>
+                        <span class="info-value" id="activeServices">0/0</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Total Requests:</span>
+                        <span class="info-value" id="totalRequests">--</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Network I/O:</span>
+                        <span class="info-value" id="networkIO">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <h3 class="info-title">
+                    <span class="title-icon">🔔</span>
+                    Alerts & Notifications
+                </h3>
+                <div class="alerts-container" id="alertsContainer">
+                    <div class="alert-item success">
+                        <span class="alert-icon">✓</span>
+                        <span>All systems operational</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-item">
+                    <span>Last Updated: <span id="lastUpdate">--</span></span>
+                </div>
+                <div class="footer-item">
+                    <span>Auto-refresh: <span id="refreshStatus">ON</span></span>
+                </div>
+                <div class="footer-item">
+                    <button class="refresh-button" id="manualRefresh">
+                        <span class="refresh-icon">🔄</span> Refresh Now
+                    </button>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
