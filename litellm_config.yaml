@@ -1,0 +1,20 @@
+model_list:
+  - model_name: brain-heavy
+    litellm_params:
+      model: openai/brain-heavy
+      api_base: http://192.168.1.9:8000/v1
+      api_key: none
+
+  - model_name: brawn-fast
+    litellm_params:
+      model: openai/brawn-fast
+      api_base: http://192.168.1.222:8002/v1
+      api_key: none
+
+  - model_name: intel-vision
+    litellm_params:
+      model: ollama/llava
+      api_base: http://192.168.1.X:11434
+
+general_settings:
+  master_key: sk-master-key
