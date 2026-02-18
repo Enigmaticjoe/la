@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  litellm-proxy:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm-proxy
+    restart: unless-stopped
+    network_mode: host
+    command: ["--config", "/app/config/litellm_config.yaml", "--host", "0.0.0.0", "--port", "4000"]
+    volumes:
+      - ./litellm_config.yaml:/app/config/litellm_config.yaml:ro
+    environment:
+      LITELLM_MASTER_KEY: sk-master-key
