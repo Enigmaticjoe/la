@@ -8,6 +8,6 @@ services:
     network_mode: host
     command: ["--config", "/app/config/litellm_config.yaml", "--host", "0.0.0.0", "--port", "4000"]
     volumes:
-      - /mnt/user/appdata/litellm/litellm_config.yaml:/app/config/litellm_config.yaml:ro
+      - ./litellm_config.yaml:/app/config/litellm_config.yaml:ro
     environment:
       LITELLM_MASTER_KEY: sk-master-key
