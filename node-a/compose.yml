@@ -91,8 +91,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 240s
+      retries: 10
+      start_period: 600s
 
   # ---------------------------------------------------------------------------
   # TEI Embeddings — CPU-only text embedding inference
@@ -150,7 +150,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
 
   # ---------------------------------------------------------------------------
   # Redis — Cache for SearXNG rate-limiting and WebUI sessions
@@ -195,7 +195,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
       timeout: 10s
       retries: 3

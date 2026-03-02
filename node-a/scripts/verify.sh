@@ -70,7 +70,7 @@ check_http "${NODE_A}" 4000 "LiteLLM"          "/health"
 
 section "Chat & RAG"
 check_http "${NODE_A}" 3000 "Open WebUI"       "/health"
-check_http "${NODE_A}" 8888 "SearXNG"          "/healthz"
+check_http "${NODE_A}" 8888 "SearXNG"          "/"
 
 section "Storage & Cache"
 check_http "${NODE_A}" 6333 "Qdrant"           "/healthz"
