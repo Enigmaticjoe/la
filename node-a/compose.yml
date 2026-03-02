@@ -1,0 +1,311 @@
+###############################################################################
+# node-a/compose.yml
+# NODE A (Brain) — Pop!_OS | 192.168.1.9 | RX 7900 XT 20GB | ROCm
+# Project Chimera — Primary AI inference stack
+#
+# Deploy: bash node-a/scripts/deploy.sh
+# Verify: bash node-a/scripts/verify.sh
+#
+# Prerequisites: copy node-a/.env.example → node-a/.env and fill secrets
+#
+# SERVICES & PORTS:
+#   8000  — vLLM            OpenAI-compatible inference (ROCm)
+#   8001  — TEI Embeddings  Text embedding inference (CPU)
+#   3000  — Open WebUI      Chat interface
+#   4000  — LiteLLM         Proxy / load-balancer
+#   6333  — Qdrant          Vector database
+#   6379  — Redis           Cache (SearXNG + WebUI sessions)
+#   8888  — SearXNG         Metasearch for web RAG
+#   3010  — Homepage        Dashboard
+#
+# DATA PATHS: /mnt/user/appdata/node-a/<service>
+#
+# GPU BUDGET (RX 7900 XT 20GB):
+#   vLLM VRAM:  ~17.6GB (88% of 20GB) — VLLM_GPU_MEM_UTIL in .env
+#   TEI:        CPU-only to reserve full GPU for vLLM
+###############################################################################
+
+networks:
+  node_a_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+services:
+  # ---------------------------------------------------------------------------
+  # vLLM — Primary inference (ROCm / RX 7900 XT)
+  # Swap models by updating VLLM_MODEL in .env and restarting.
+  # ---------------------------------------------------------------------------
+  vllm:
+    image: vllm/vllm-openai:v0.15.1
+    container_name: node-a-vllm
+    restart: unless-stopped
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - HF_TOKEN=${HF_TOKEN}
+      - HSA_OVERRIDE_GFX_VERSION=11.0.0
+      - ROCM_PATH=/opt/rocm
+      - PYTORCH_ROCM_ARCH=gfx1100
+      - HIP_VISIBLE_DEVICES=0
+      - VLLM_ROCM_USE_AITER=1
+      - VLLM_ROCM_USE_AITER_RMSNORM=1
+      - VLLM_ROCM_USE_AITER_MOE=1
+      - VLLM_USE_TRITON_FLASH_ATTN=0
+      - HIP_FORCE_DEV_KERNARG=1
+    volumes:
+      - /mnt/user/appdata/node-a/vllm-models:/root/.cache/huggingface
+    ports:
+      - "192.168.1.9:8000:8000"
+    command:
+      - --model
+      - ${VLLM_MODEL:-Qwen/Qwen2.5-14B-Instruct}
+      - --dtype
+      - ${VLLM_DTYPE:-float16}
+      - --gpu-memory-utilization
+      - "${VLLM_GPU_MEM_UTIL:-0.88}"
+      - --max-model-len
+      - "${VLLM_MAX_LEN:-8192}"
+      - --max-num-seqs
+      - "${VLLM_MAX_NUM_SEQS:-8}"
+      - --api-key
+      - ${VLLM_API_KEY}
+      - --port
+      - "8000"
+      - --host
+      - "0.0.0.0"
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - hermes
+    networks:
+      node_a_net:
+        ipv4_address: 172.30.0.10
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - "992"
+    ipc: host
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 240s
+
+  # ---------------------------------------------------------------------------
+  # TEI Embeddings — CPU-only text embedding inference
+  # Model auto-downloads on first start (~500 MB).
+  # ---------------------------------------------------------------------------
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    container_name: node-a-embeddings
+    restart: unless-stopped
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+    volumes:
+      - /mnt/user/appdata/node-a/embeddings-cache:/data
+    ports:
+      - "192.168.1.9:8001:80"
+    command:
+      - --model-id
+      - ${EMBED_MODEL:-BAAI/bge-base-en-v1.5}
+      - --port
+      - "80"
+      - --max-batch-tokens
+      - "8192"
+    networks:
+      node_a_net:
+        ipv4_address: 172.30.0.20
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+  # ---------------------------------------------------------------------------
+  # Qdrant — Vector database for RAG
+  # ---------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: node-a-qdrant
+    restart: unless-stopped
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    volumes:
+      - /mnt/user/appdata/node-a/qdrant/storage:/qdrant/storage
+      - /mnt/user/appdata/node-a/qdrant/snapshots:/qdrant/snapshots
+    ports:
+      - "192.168.1.9:6333:6333"
+      - "192.168.1.9:6334:6334"
+    networks:
+      node_a_net:
+        ipv4_address: 172.30.0.30
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Redis — Cache for SearXNG rate-limiting and WebUI sessions
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: node-a-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - /mnt/user/appdata/node-a/redis:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      node_a_net:
+        ipv4_address: 172.30.0.40
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # SearXNG — Privacy-respecting metasearch for web RAG
+  # ---------------------------------------------------------------------------
+  searxng:
+    image: searxng/searxng:latest
+    container_name: node-a-searxng
+    restart: unless-stopped
+    environment:
+      - SEARXNG_BASE_URL=http://192.168.1.9:8888/
+      - SEARXNG_REDIS_URL=redis://172.30.0.40:6379/0
+    volumes:
+      - /mnt/user/appdata/node-a/searxng:/etc/searxng
+    ports:
+      - "192.168.1.9:8888:8080"
+    networks:
+      node_a_net:
+        ipv4_address: 172.30.0.50
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # LiteLLM — OpenAI-compatible proxy / multi-model router
+  # Config: node-a/litellm/config.yaml
+  # ---------------------------------------------------------------------------
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: node-a-litellm
+    restart: unless-stopped
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - VLLM_API_KEY=${VLLM_API_KEY}
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    ports:
+      - "192.168.1.9:4000:4000"
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+    networks:
+      node_a_net:
+        ipv4_address: 172.30.0.60
+    depends_on:
+      vllm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Open WebUI — Chat interface with full RAG support
+  # PUID/PGID=99/100 for persistent data ownership (Unraid convention)
+  # ---------------------------------------------------------------------------
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: node-a-openwebui
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - WEBUI_AUTH=true
+      - WEBUI_NAME=Node A — Project Chimera
+      # LLM backend via LiteLLM proxy
+      - OPENAI_API_BASE_URLS=http://172.30.0.60:4000/v1
+      - OPENAI_API_KEYS=${LITELLM_MASTER_KEY}
+      # RAG — local TEI embeddings
+      - RAG_EMBEDDING_ENGINE=openai
+      - RAG_OPENAI_API_BASE_URL=http://172.30.0.20:80/v1
+      - RAG_OPENAI_API_KEY=sk-local
+      - RAG_EMBEDDING_MODEL=${EMBED_MODEL:-BAAI/bge-base-en-v1.5}
+      - ENABLE_RAG_HYBRID_SEARCH=true
+      # RAG — web search via local SearXNG
+      - ENABLE_RAG_WEB_SEARCH=true
+      - RAG_WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://172.30.0.50:8080/search?q=<query>
+      # Vector store
+      - VECTOR_DB=qdrant
+      - QDRANT_URI=http://172.30.0.30:6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
+    volumes:
+      - /mnt/user/appdata/node-a/openwebui:/app/backend/data
+    ports:
+      - "192.168.1.9:3000:8080"
+    networks:
+      node_a_net:
+        ipv4_address: 172.30.0.70
+    depends_on:
+      litellm:
+        condition: service_healthy
+      embeddings:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      searxng:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Homepage — Dashboard for all stack services
+  # Config: node-a/homepage/
+  # ---------------------------------------------------------------------------
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: node-a-homepage
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+    volumes:
+      - /mnt/user/appdata/node-a/homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "192.168.1.9:3010:3000"
+    networks:
+      node_a_net:
+        ipv4_address: 172.30.0.80
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

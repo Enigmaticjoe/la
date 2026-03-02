@@ -1,0 +1,26 @@
+# node-a/litellm/config.yaml
+# LiteLLM proxy configuration for Node A
+# Keys are read from environment variables — never hard-code secrets here.
+#
+# Reference: https://docs.litellm.ai/docs/proxy/configs
+
+model_list:
+  - model_name: node-a-primary
+    litellm_params:
+      model: openai/node-a-primary
+      api_base: http://192.168.1.9:8000/v1
+      api_key: os.environ/VLLM_API_KEY
+      timeout: 6          # seconds per attempt (budget < 7 s per the spec)
+      max_retries: 2
+
+router_settings:
+  # Retry on transient failures; total budget stays well under 7 s
+  num_retries: 2
+  timeout: 6
+  retry_after: 0
+  allowed_fails: 2
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # Disable telemetry
+  telemetry: false
