@@ -93,7 +93,7 @@ The system runs across multiple nodes in a home lab environment:
 - **Storage**: Dual 1TB NVMe SSD + 3TB HDD
 - **Network**: Dual 10 GbE NICs
 - **Role**: Core AI services (LLM inference, automation, web dashboard)
-- **OS**: Ubuntu 24.04 LTS / Pop!_OS 22.04 LTS
+- **OS**: Fedora 44 COSMIC (recommended) / Ubuntu 24.04 LTS
 
 #### **Unraid Server (NAS/Offload)**
 - **GPU**: Intel Arc A770 (16 GB)
@@ -685,9 +685,9 @@ sudo ufw allow from 192.168.1.222 to any port 11434
 
 ### Software Constraints
 
-1. **OS Version**: Ubuntu 24.04 LTS / Pop!_OS 22.04 LTS
-   - Pop!_OS 24.04 with COSMIC is beta (unstable)
-   - Prefer LTS releases for stability
+1. **OS Version**: Fedora 44 COSMIC (primary target) / Ubuntu 24.04 LTS
+   - Fedora 44 COSMIC ships Linux kernel 7.x with native AMD Zen 6 / RX 7900 XT support
+   - Prefer Fedora 44 COSMIC for maximum hardware utilization in 2026
 
 2. **NVIDIA Drivers**: Version 535+ recommended
    - Ensure compatibility with CUDA toolkit
@@ -861,9 +861,12 @@ environment:
 
 ### Performance Optimization
 
-#### Disable Desktop Effects (Pop!_OS)
+#### Disable Compositor Animations (Fedora 44 COSMIC)
 ```bash
-gsettings set org.gnome.desktop.interface enable-animations false
+# COSMIC desktop uses its own config system, not gsettings.
+# Toggle via GUI: COSMIC Settings → Appearance → Animations → Off
+# Or via CLI (cosmic-config):
+cosmic-config set com.system76.CosmicTheme animations-enabled false
 ```
 
 #### Increase Ollama Concurrency

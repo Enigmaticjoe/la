@@ -1,6 +1,6 @@
 ###############################################################################
 # node-a/compose.yml
-# NODE A (Brain) — Pop!_OS | 192.168.1.9 | RX 7900 XT 20GB | ROCm
+# NODE A (Brain) — Fedora 44 COSMIC | 192.168.1.9 | RX 7900 XT 20GB | ROCm
 # Project Chimera — Primary AI inference stack
 #
 # Deploy: bash node-a/scripts/deploy.sh
@@ -38,7 +38,9 @@ services:
   # Swap models by updating VLLM_MODEL in .env and restarting.
   # ---------------------------------------------------------------------------
   vllm:
-    image: vllm/vllm-openai:v0.15.1
+    # rocm/vllm:latest is the AMD-official ROCm image; vllm/vllm-openai:latest
+    # works with the ROCm env-vars below on Fedora 44 + ROCm 7.x.
+    image: rocm/vllm:latest
     container_name: node-a-vllm
     restart: unless-stopped
     environment:

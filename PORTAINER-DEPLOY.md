@@ -14,7 +14,7 @@ This guide provides step-by-step instructions for deploying the Brain Stack (bra
 
 ### System Requirements
 
-- **Node**: Pop!_OS or Ubuntu-based Linux
+- **Node**: Fedora 44 COSMIC (recommended) or Ubuntu-based Linux
 - **CPU**: Intel Ultra 9 285K (or similar high-end CPU)
 - **GPU**: AMD RX 7900 XT 20GB with ROCm support
 - **RAM**: 128GB DDR5

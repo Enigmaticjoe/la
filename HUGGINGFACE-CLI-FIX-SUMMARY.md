@@ -9,7 +9,7 @@ This document summarizes the changes made to fix and optimize the Hugging Face C
 - **GPU**: AMD Radeon RX 7900 XT (20GB VRAM, gfx1100 architecture)
 - **CPU**: Intel Core i9-285K (or Ultra 9 285K)
 - **RAM**: 128GB DDR5
-- **OS**: Pop!_OS 22.04 LTS (Ubuntu-based)
+- **OS**: Fedora 44 COSMIC
 - **Target Model**: cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-AWQ
 
 ## Changes Made
@@ -57,7 +57,7 @@ bash brain-model-downloader.sh
 **Purpose**: Complete AMD ROCm setup and optimization guide
 
 **Contents**:
-- ROCm installation instructions for Ubuntu/Pop!_OS
+- ROCm installation instructions for Fedora 44 COSMIC / Ubuntu
 - Environment variable configuration for RX 7900 XT (gfx1100)
 - Python environment setup
 - Docker configuration for AMD GPU
@@ -381,5 +381,5 @@ See `BRAIN-AMD-SETUP.md` for detailed troubleshooting.
 ---
 
 **Created**: 2026-02-14  
-**For**: Brain Node (Pop!_OS 192.168.1.9) - AMD RX 7900 XT Setup  
+**For**: Brain Node (Fedora 44 COSMIC — 192.168.1.9) - AMD RX 7900 XT Setup  
 **Status**: Complete and tested

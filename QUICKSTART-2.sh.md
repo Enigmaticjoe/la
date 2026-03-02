@@ -13,11 +13,11 @@ sudo ./2.sh
 
 ## What It Does
 
-Installs Docker Engine + Portainer CE on Fedora 43 with one command.
+Installs Docker Engine + Portainer CE on Fedora 44 COSMIC with one command.
 
 ## Requirements
 
-- Fedora 43 (or 39+)
+- Fedora 44 COSMIC (or Fedora 39+)
 - sudo/root access
 - Internet connection
 - 10GB disk space

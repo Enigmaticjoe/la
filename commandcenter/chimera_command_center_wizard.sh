@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT CHIMERA COMMAND CENTER WIZARD - DIGITAL RENEGADE EDITION
-# Pop!_OS Workstation → Sovereign AI Ecosystem Control Node (Jan 2026)
+# Fedora 44 COSMIC Workstation → Sovereign AI Ecosystem Control Node (2026)
 #
 # This isn't just an installer. This is the birth of your digital empire.
 # You're not installing software. You're waking a sovereign, unfiltered mind.
@@ -132,10 +132,10 @@ sleep 2
 section "PRE-FLIGHT CHECKS"
 
 log "Checking OS version..."
-if ! grep -q "Pop!_OS" /etc/os-release && ! grep -q "Ubuntu" /etc/os-release; then
-    error "This script requires Pop!_OS or Ubuntu. Detected: $(lsb_release -d)"
+if ! grep -q "Fedora" /etc/os-release && ! grep -q "Pop!_OS" /etc/os-release && ! grep -q "Ubuntu" /etc/os-release; then
+    warn "Detected OS is not Fedora, Pop!_OS, or Ubuntu. Fedora 44 COSMIC is the recommended platform."
 fi
-success "OS check passed: $(lsb_release -d)"
+success "OS check passed: $(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"')"
 
 log "Checking disk space..."
 AVAIL=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')

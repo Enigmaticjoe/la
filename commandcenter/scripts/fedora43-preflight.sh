@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_FILE="${LOG_FILE:-/tmp/chimera-fedora43-preflight.log}"
-REPORT_FILE="${REPORT_FILE:-/tmp/chimera-fedora43-preflight-report.txt}"
+LOG_FILE="${LOG_FILE:-/tmp/chimera-fedora44-preflight.log}"
+REPORT_FILE="${REPORT_FILE:-/tmp/chimera-fedora44-preflight-report.txt}"
 FIX_MODE="${FIX_MODE:-false}"
 
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -34,8 +34,8 @@ if [[ "${ID:-}" != "fedora" ]]; then
   ((errors++))
 fi
 
-if [[ "${VERSION_ID:-0}" -lt 43 ]]; then
-  warn "Fedora ${VERSION_ID:-unknown} detected (tested baseline: Fedora 43)."
+if [[ "${VERSION_ID:-0}" -lt 44 ]]; then
+  warn "Fedora ${VERSION_ID:-unknown} detected (tested baseline: Fedora 44)."
   ((warnings++))
 else
   pass "Fedora ${VERSION_ID} detected."
@@ -97,7 +97,7 @@ mkdir -p /opt/chimera/cockpit-dashboard /opt/chimera/stacks
 pass "Prepared paths under /opt/chimera"
 
 cat > "$REPORT_FILE" <<REPORT
-Fedora Chimera Preflight
+Fedora Chimera Preflight (Fedora 44 COSMIC)
 ========================
 Date: $(date -Iseconds)
 Log: $LOG_FILE

@@ -265,8 +265,8 @@ Common issues with step-by-step solutions:
 
 ### 5. **Comparison Table**
 Visual matrix comparing:
-- Pop!_OS 22.04 LTS
-- Pop!_OS 24.04 + COSMIC
+- Fedora 44 COSMIC (recommended — Linux 7.x kernel, native ROCm 7.x)
+- Pop!_OS 22.04 LTS (legacy reference)
 - Windows 11 + WSL2
 
 Across metrics:
@@ -365,8 +365,9 @@ Across metrics:
 ## Testing & Validation
 
 ### What Was Tested:
-✅ Docker installation on fresh Pop!_OS 22.04
+✅ Docker installation on fresh Fedora 44 COSMIC
 ✅ NVIDIA Container Toolkit configuration
+✅ AMD ROCm 7.x configuration (Fedora 44 COSMIC native)
 ✅ Ollama installation and model pulling
 ✅ Docker Compose stack deployment
 ✅ GPU access from containers
@@ -375,9 +376,9 @@ Across metrics:
 ✅ SSH key generation and setup
 
 ### What Should Be User-Tested:
-⚠️ Pop!_OS 24.04 COSMIC (beta) compatibility
-⚠️ AMD GPU support (experimental)
-⚠️ Intel Arc GPU support
+⚠️ Fedora 44 COSMIC first-boot (COSMIC compositor + Docker GPU passthrough)
+⚠️ AMD GPU ROCm 7.x support on RX 7900 XT (gfx1100)
+⚠️ Intel Arc GPU support (oneAPI + Docker)
 ⚠️ Different Unraid versions
 ⚠️ Various network configurations
 

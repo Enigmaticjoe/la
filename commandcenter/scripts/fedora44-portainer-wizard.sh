@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+# ===========================================================================
+# Chimera Fedora 44 COSMIC — Portainer-first Deployment Wizard
+#
+# Usage:
+#   sudo ./scripts/fedora44-portainer-wizard.sh [--stop-on-error]
+#
+# What it does:
+#   1. Runs the Fedora 44 COSMIC preflight check
+#   2. Creates /opt/chimera/{cockpit-dashboard,stacks}
+#   3. Installs the cockpit dashboard web assets
+#   4. Stages the Portainer stack file with environment defaults
+#   5. Prints guided next steps for Portainer deployment
+# ===========================================================================
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,7 +36,7 @@ step() {
 
 usage() {
   cat <<USAGE
-Usage: sudo ./scripts/fedora43-portainer-wizard.sh [--stop-on-error]
+Usage: sudo ./scripts/fedora44-portainer-wizard.sh [--stop-on-error]
 
 Deploys a Portainer-first Fedora 44 COSMIC stack with:
 - Open WebUI + Ollama (local AI endpoint wiring)
@@ -46,14 +59,14 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-step "Run Fedora preflight" bash "$ROOT_DIR/scripts/fedora44-preflight.sh"
+step "Run Fedora 44 COSMIC preflight" bash "$ROOT_DIR/scripts/fedora44-preflight.sh"
 step "Create target directories" mkdir -p "$TARGET_ROOT"/{cockpit-dashboard,stacks}
 step "Install cockpit dashboard assets" bash -c "cp -r '$DASHBOARD_SRC/'* '$TARGET_ROOT/cockpit-dashboard/'"
 step "Install Portainer stack bundle" cp "$STACK_SRC" "$TARGET_ROOT/stacks/fedora44-cockpit-stack.yml"
 
 step "Create env file" bash -c "cat > '$TARGET_ROOT/stacks/.env' <<ENV
 TZ=America/New_York
-WEBUI_NAME=Chimera Cockpit
+WEBUI_NAME=Chimera Cockpit (Fedora 44 COSMIC)
 OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1
 OPENAI_API_KEY=change-me
 CF_TUNNEL_TOKEN=
@@ -64,7 +77,7 @@ Next steps:
 1) In Portainer: Stacks -> Add stack -> Upload /opt/chimera/stacks/fedora44-cockpit-stack.yml
 2) Add env vars from /opt/chimera/stacks/.env
 3) Deploy stack, then open http://<host>:3000
-4) In Open WebUI, set connection to local inference endpoint for Arc A770.
+4) In Open WebUI, set connection to local inference endpoint.
 NEXT"
 
 if (( ${#FAILED_STEPS[@]} > 0 )); then
@@ -74,4 +87,4 @@ if (( ${#FAILED_STEPS[@]} > 0 )); then
   exit 1
 fi
 
-echo "Deployment prep finished successfully."
+echo "Fedora 44 COSMIC deployment prep finished successfully."

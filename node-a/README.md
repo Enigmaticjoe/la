@@ -1,6 +1,6 @@
 # Node A — Project Chimera AI Stack
 
-**Host:** `192.168.1.9` | Pop!_OS | RX 7900 XT 20 GB | ROCm  
+**Host:** `192.168.1.9` | Fedora 44 COSMIC | RX 7900 XT 20 GB | ROCm  
 **Role:** Primary AI inference node
 
 ---
@@ -88,13 +88,13 @@ Edit tunables in `node-a/.env`:
 
 ## Network map
 
-| Node | IP |
-|------|----|
-| Node A (this node) | 192.168.1.9 |
-| Node C | 192.168.1.6 |
-| Home Assistant | 192.168.1.149 |
-| Proxmox | 192.168.1.174 |
-| Brawn (Unraid) | 192.168.1.222 |
+| Node | IP | OS |
+|------|----|----|
+| Node A (this node) | 192.168.1.9 | Fedora 44 COSMIC |
+| Node C | 192.168.1.6 | Fedora 44 COSMIC |
+| Home Assistant | 192.168.1.149 | — |
+| Proxmox | 192.168.1.174 | — |
+| Brawn (Unraid) | 192.168.1.222 | — |
 
 ---
 

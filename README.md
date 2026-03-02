@@ -32,7 +32,7 @@ bash scripts/automation/deploy-updated-stacks.sh
 | `brawn-validate.sh` | Post-deploy health check for all services |
 | `brawn-maintenance.sh` | Cleanup orphans, check health, disk report |
 
-### Brain Node (Pop!_OS 192.168.1.9) - Primary AI Workloads
+### Brain Node (Fedora 44 COSMIC — 192.168.1.9) - Primary AI Workloads
 
 | File | Purpose |
 |------|---------|
@@ -86,7 +86,7 @@ nano /mnt/user/appdata/zurg/config/config.yml
 bash brawn-validate.sh
 ```
 
-### Brain Node (Pop!_OS - AMD RX 7900 XT)
+### Brain Node (Fedora 44 COSMIC — AMD RX 7900 XT)
 
 ```bash
 # 1. Install ROCm (if not already installed)

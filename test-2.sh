@@ -112,8 +112,8 @@ else
     print_fail "Error trap is not configured"
 fi
 
-# Test 5: Check for DNF command variations (Fedora 43 compatibility)
-print_test "Checking DNF command compatibility for Fedora 43..."
+# Test 5: Check for DNF command variations (Fedora 44 COSMIC compatibility)
+print_test "Checking DNF command compatibility for Fedora 44 COSMIC..."
 if grep -q "dnf config-manager add-repo" 2.sh; then
     print_pass "New DNF5 syntax 'add-repo' found"
 else

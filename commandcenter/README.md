@@ -42,7 +42,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        BRAIN NODE                           │
-│  Ryzen 7700 + Intel Arc A770 16GB + 32GB DDR5 (Pop!_OS)    │
+│  Ryzen 7700 + Intel Arc A770 16GB + 32GB DDR5 (Fedora 44 COSMIC)    │
 │  • Ollama (LLM inference)                                   │
 │  • Open WebUI (chat interface)                              │
 │  • Qdrant (vector memory)                                   │
@@ -82,15 +82,15 @@
 
 ## 🚀 Quick Start
 
-### Fedora 43 + Portainer-first flow (recommended for Arc A770)
+### Fedora 44 COSMIC + Portainer-first flow (recommended for Arc A770)
 
 ```bash
-chmod +x scripts/fedora43-preflight.sh scripts/fedora43-portainer-wizard.sh
-sudo FIX_MODE=true ./scripts/fedora43-preflight.sh
-sudo ./scripts/fedora43-portainer-wizard.sh
+chmod +x scripts/fedora44-preflight.sh scripts/fedora44-portainer-wizard.sh
+sudo FIX_MODE=true ./scripts/fedora44-preflight.sh
+sudo ./scripts/fedora44-portainer-wizard.sh
 ```
 
-This flow prepares `/opt/chimera`, installs the cockpit dashboard assets, and stages a Portainer stack file at `/opt/chimera/stacks/fedora43-cockpit-stack.yml` with Open WebUI + Ollama + Qdrant + Redis + Portainer and optional Cloudflared profile.
+This flow prepares `/opt/chimera`, installs the cockpit dashboard assets, and stages a Portainer stack file at `/opt/chimera/stacks/fedora44-cockpit-stack.yml` with Open WebUI + Ollama + Qdrant + Redis + Portainer and optional Cloudflared profile.
 
 ### Prerequisites
 
@@ -100,7 +100,7 @@ This flow prepares `/opt/chimera`, installs the cockpit dashboard assets, and st
   - Edge: Home Assistant and/or Blue Iris (optional)
 
 - **Software**:
-  - Pop!_OS 22.04+ or Ubuntu 24.04+
+  - Fedora 44 COSMIC (recommended) or Ubuntu 24.04+
   - 100GB+ free disk space
   - Root/sudo access
 
