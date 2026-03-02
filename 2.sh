@@ -1,11 +1,11 @@
 #!/bin/bash
 
 #############################################################################
-# PORTAINER CE INSTALLER FOR FEDORA 43
+# PORTAINER CE INSTALLER FOR FEDORA 44 COSMIC
 # Installs Docker Engine + Portainer Community Edition
 # 
 # Requirements:
-#   - Fedora 43
+#   - Fedora 44 COSMIC (also supports Fedora 39+)
 #   - Root/sudo privileges
 #   - Internet connection
 #
@@ -45,8 +45,8 @@ PORTAINER_INSTALLED=false
 print_header() {
     echo -e "\n${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║        PORTAINER CE INSTALLER FOR FEDORA 43                   ║"
-    echo "║        Docker Engine + Portainer Community Edition            ║"
+    echo "║     PORTAINER CE INSTALLER FOR FEDORA 44 COSMIC               ║"
+    echo "║     Docker Engine + Portainer Community Edition               ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -231,7 +231,7 @@ install_dependencies() {
 add_docker_repository() {
     print_step "3/6" "Adding Docker repository..."
     
-    # Fedora 43+ uses new DNF5 syntax
+    # Fedora 44+ uses DNF5 syntax (also compatible with Fedora 43+)
     # Try new syntax first, fall back to old syntax
     if dnf config-manager add-repo "$DOCKER_REPO_URL" 2>/dev/null; then
         print_success "Docker repository added (using dnf5 syntax)"
@@ -465,7 +465,7 @@ main() {
     check_ports
     
     # Phase 1: Install Docker
-    print_phase "1" "Installing Docker Engine for Fedora 43..."
+    print_phase "1" "Installing Docker Engine for Fedora 44 COSMIC..."
     remove_old_docker
     install_dependencies
     add_docker_repository

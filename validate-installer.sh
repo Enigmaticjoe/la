@@ -156,7 +156,7 @@ echo "╚═══════════════════════�
 echo ""
 echo -e "${GREEN}✅ Script structure is valid${NC}"
 echo -e "${GREEN}✅ All critical functions are present${NC}"
-echo -e "${GREEN}✅ Fedora 43 DNF5 compatibility implemented${NC}"
+echo -e "${GREEN}✅ Fedora 44 COSMIC DNF5 compatibility implemented${NC}"
 echo -e "${GREEN}✅ Error handling and rollback configured${NC}"
 echo -e "${GREEN}✅ System checks implemented${NC}"
 echo ""

@@ -11,8 +11,8 @@
   - nvme1n1: 1.8TB (AI Data)
 
 **Software:**
-- OS: Pop!_OS 24.04 LTS
-- Kernel: 6.17.9-76061709-generic
+- OS: Fedora 44 COSMIC
+- Kernel: 7.x (Linux 7.0+ — AMD Zen 6 / RX 7900 XT optimized)
 - GPU Stack: ROCm + amdgpu kernel driver
 - User: jb
 

@@ -10,7 +10,7 @@ This guide provides complete setup instructions for running AWQ-quantized LLM mo
 - **GPU**: AMD Radeon RX 7900 XT (20GB VRAM, gfx1100 architecture)
 - **CPU**: Intel Core i9-285K or similar high-end processor
 - **RAM**: 128GB DDR5
-- **OS**: Ubuntu 24.04 LTS / Ubuntu 22.04 LTS / Pop!_OS 22.04 LTS (or Ubuntu-based Linux)
+- **OS**: Fedora 44 COSMIC (recommended) / Ubuntu 24.04 LTS / Ubuntu 22.04 LTS (or Ubuntu-based Linux)
 - **Target Model**: Dolphin 2.9.3 Llama 3.1 8B AWQ (~5-6GB quantized)
 
 ---
@@ -55,7 +55,16 @@ docker compose -f brain-stack.yml up -d
 
 ### 1. ROCm Installation (Detailed)
 
-**For Ubuntu 22.04 / Pop!_OS 22.04 / Ubuntu 24.04:**
+**For Fedora 44 COSMIC (DNF/RPM):**
+
+```bash
+# Add ROCm repository (Fedora 44 COSMIC)
+sudo dnf install -y https://repo.radeon.com/rocm/rhel/6.x/main/rocm.repo || \
+  sudo dnf config-manager add-repo https://repo.radeon.com/amdgpu/latest/rhel/9.4/amdgpu.repo
+sudo dnf install -y rocm-hip-sdk rocm-dev rocm-smi-lib rocm-opencl
+```
+
+**For Ubuntu 22.04 / Ubuntu 24.04:**
 
 ```bash
 # Add ROCm repository (Ubuntu 24.04 Noble / 22.04 Jammy)

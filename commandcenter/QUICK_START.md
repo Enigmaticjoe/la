@@ -21,7 +21,7 @@ open http://localhost:3000
 
 ## Prerequisites Checklist
 
-- [ ] Pop!_OS 22.04+ or Ubuntu 24.04+
+- [ ] Fedora 44 COSMIC (recommended) or Ubuntu 24.04+
 - [ ] AMD Ryzen 7700 (or similar) + Intel Arc A770 16GB (or NVIDIA RTX)
 - [ ] 32GB+ RAM
 - [ ] 100GB+ free disk space
