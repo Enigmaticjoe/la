@@ -57,22 +57,63 @@ header "
 
 section "Checking Prerequisites"
 
-# Check Docker
+# Check Docker - auto-install if missing
 if command -v docker &>/dev/null; then
     DOCKER_VERSION=$(docker --version | grep -oP '\d+\.\d+\.\d+' | head -1)
     ok "Docker installed: v${DOCKER_VERSION}"
 else
-    fail "Docker not found. Please install Docker first."
-    echo "   Install from: https://docs.docker.com/get-docker/"
-    exit 1
+    warn "Docker not found. Installing via the official get.docker.com script..."
+    warn "This downloads and executes: https://get.docker.com"
+    if ! curl -fsSL https://get.docker.com | sh; then
+        fail "Docker auto-install failed. Please install manually."
+        echo "   Install from: https://docs.docker.com/get-docker/"
+        exit 1
+    fi
+    # Start and enable the Docker service
+    if systemctl enable --now docker 2>/dev/null; then
+        ok "Docker service enabled and started"
+    elif service docker start 2>/dev/null; then
+        ok "Docker service started"
+    else
+        warn "Could not start Docker service automatically. You may need to run: sudo systemctl start docker"
+    fi
+    # Add the invoking user to the docker group so they can run docker without sudo
+    INVOKING_USER="${SUDO_USER:-$USER}"
+    if usermod -aG docker "$INVOKING_USER" 2>/dev/null; then
+        ok "User '$INVOKING_USER' added to the 'docker' group."
+        info "If you see permission errors below, log out and back in, then re-run this script."
+    else
+        warn "Could not add '$INVOKING_USER' to the docker group. You may need to run: sudo usermod -aG docker $INVOKING_USER"
+    fi
+    if command -v docker &>/dev/null; then
+        DOCKER_VERSION=$(docker --version | grep -oP '\d+\.\d+\.\d+' | head -1)
+        ok "Docker installed: v${DOCKER_VERSION}"
+    else
+        fail "Docker installation failed. Please install manually."
+        echo "   Install from: https://docs.docker.com/get-docker/"
+        exit 1
+    fi
 fi
 
-# Check Docker Compose
-if command -v docker compose &>/dev/null || command -v docker-compose &>/dev/null; then
-    ok "Docker Compose available"
+# Check Docker Compose - auto-install if missing
+if docker compose version &>/dev/null 2>&1; then
+    ok "Docker Compose (plugin) available"
+elif command -v docker-compose &>/dev/null; then
+    ok "Docker Compose (standalone) available"
 else
-    fail "Docker Compose not found. Please install Docker Compose."
-    exit 1
+    warn "Docker Compose plugin not found. Installing standalone binary..."
+    # The get.docker.com script already installs the compose plugin on most distros;
+    # fall back to the official standalone binary if the plugin is still absent.
+    COMPOSE_VERSION=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest \
+        | grep -oP '"tag_name":\s*"\K[^"]+' | head -1 || echo "v2.27.0")
+    if curl -fsSL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" \
+        -o /usr/local/bin/docker-compose && chmod +x /usr/local/bin/docker-compose; then
+        ok "Docker Compose standalone installed: ${COMPOSE_VERSION}"
+    else
+        fail "Docker Compose installation failed. Please install it manually."
+        echo "   Install from: https://docs.docker.com/compose/install/"
+        exit 1
+    fi
 fi
 
 # Check for AMD GPU
