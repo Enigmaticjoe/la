@@ -1,0 +1,54 @@
+# node-a/homepage/services.yaml
+# Homepage dashboard service definitions for Node A stack
+# Docs: https://gethomepage.dev/latest/configs/services/
+
+- AI Inference:
+    - vLLM:
+        href: http://192.168.1.9:8000/docs
+        description: OpenAI-compatible inference (ROCm)
+        ping: http://192.168.1.9:8000/health
+        icon: mdi-brain
+
+    - LiteLLM Proxy:
+        href: http://192.168.1.9:4000
+        description: Multi-model router / proxy
+        ping: http://192.168.1.9:4000/health
+        icon: mdi-swap-horizontal
+
+    - TEI Embeddings:
+        href: http://192.168.1.9:8001
+        description: Text embedding inference (CPU)
+        ping: http://192.168.1.9:8001/health
+        icon: mdi-vector-line
+
+- Chat & RAG:
+    - Open WebUI:
+        href: http://192.168.1.9:3000
+        description: Chat interface with RAG
+        ping: http://192.168.1.9:3000/health
+        icon: mdi-chat-outline
+
+    - SearXNG:
+        href: http://192.168.1.9:8888
+        description: Privacy-respecting metasearch
+        ping: http://192.168.1.9:8888/healthz
+        icon: mdi-magnify
+
+- Storage & Cache:
+    - Qdrant:
+        href: http://192.168.1.9:6333/dashboard
+        description: Vector database
+        ping: http://192.168.1.9:6333/healthz
+        icon: mdi-database-outline
+
+    - Redis:
+        href: http://192.168.1.9:6379
+        description: Cache (SearXNG + sessions)
+        ping: http://192.168.1.9:6379
+        icon: mdi-memory
+
+- Monitoring:
+    - Homepage:
+        href: http://192.168.1.9:3010
+        description: This dashboard
+        icon: mdi-view-dashboard-outline
