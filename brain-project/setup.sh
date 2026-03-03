@@ -64,7 +64,45 @@ if command -v docker &>/dev/null; then
 else
     warn "Docker not found. Installing via the official get.docker.com script..."
     warn "This downloads and executes: https://get.docker.com"
-    if ! curl -fsSL https://get.docker.com | sh; then
+    DOCKER_INSTALLED=false
+    if curl -fsSL https://get.docker.com | sh; then
+        DOCKER_INSTALLED=true
+    else
+        # get.docker.com can fail on newer Fedora releases because Docker CE packages
+        # aren't yet published for the latest Fedora releasever.  Work around this by
+        # pointing the Docker CE repo at the last known-supported Fedora release, or by
+        # falling back to moby-engine from Fedora's own repos.
+        if command -v dnf &>/dev/null && grep -qi 'fedora' /etc/os-release 2>/dev/null; then
+            warn "get.docker.com failed on Fedora. Trying Docker CE repo with pinned baseurl..."
+            # Docker CE packages lag behind the latest Fedora release; pin to the last
+            # known-supported release.  Update this value when Docker publishes packages
+            # for a newer Fedora release: https://download.docker.com/linux/fedora/
+            DOCKER_FEDORA_RELEASEVER=40
+            # Ensure the Docker CE repo file exists so we can override only its baseurl.
+            if [ ! -f /etc/yum.repos.d/docker-ce.repo ]; then
+                curl -fsSL https://download.docker.com/linux/fedora/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo || true
+            fi
+            if dnf -y -q --best \
+                    --enablerepo=docker-ce-stable \
+                    --setopt=docker-ce-stable.baseurl="https://download.docker.com/linux/fedora/${DOCKER_FEDORA_RELEASEVER}/\$basearch/stable" \
+                    install \
+                    docker-ce docker-ce-cli containerd.io \
+                    docker-compose-plugin docker-buildx-plugin 2>/dev/null; then
+                DOCKER_INSTALLED=true
+            else
+                warn "Docker CE repo install failed. Falling back to moby-engine from Fedora repos..."
+                if dnf -y -q install moby-engine docker-compose 2>/dev/null; then
+                    ok "Installed moby-engine + docker-compose (Fedora fallback)"
+                    DOCKER_INSTALLED=true
+                elif dnf -y -q install moby-engine 2>/dev/null; then
+                    ok "Installed moby-engine (Fedora fallback; docker-compose not available)"
+                    warn "docker-compose was not installed. You may need to install it manually."
+                    DOCKER_INSTALLED=true
+                fi
+            fi
+        fi
+    fi
+    if [ "$DOCKER_INSTALLED" != "true" ]; then
         fail "Docker auto-install failed. Please install manually."
         echo "   Install from: https://docs.docker.com/get-docker/"
         exit 1
