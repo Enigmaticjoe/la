@@ -73,12 +73,19 @@ else
         # pointing the Docker CE repo at the last known-supported Fedora release, or by
         # falling back to moby-engine from Fedora's own repos.
         if command -v dnf &>/dev/null && grep -qi 'fedora' /etc/os-release 2>/dev/null; then
-            warn "get.docker.com failed on Fedora. Trying Docker CE repo with releasever override..."
+            warn "get.docker.com failed on Fedora. Trying Docker CE repo with pinned baseurl..."
             # Docker CE packages lag behind the latest Fedora release; pin to the last
             # known-supported release.  Update this value when Docker publishes packages
             # for a newer Fedora release: https://download.docker.com/linux/fedora/
             DOCKER_FEDORA_RELEASEVER=40
-            if dnf -y -q --best --releasever="$DOCKER_FEDORA_RELEASEVER" install \
+            # Ensure the Docker CE repo file exists so we can override only its baseurl.
+            if [ ! -f /etc/yum.repos.d/docker-ce.repo ]; then
+                curl -fsSL https://download.docker.com/linux/fedora/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo || true
+            fi
+            if dnf -y -q --best \
+                    --enablerepo=docker-ce-stable \
+                    --setopt=docker-ce-stable.baseurl="https://download.docker.com/linux/fedora/${DOCKER_FEDORA_RELEASEVER}/\$basearch/stable" \
+                    install \
                     docker-ce docker-ce-cli containerd.io \
                     docker-compose-plugin docker-buildx-plugin 2>/dev/null; then
                 DOCKER_INSTALLED=true
